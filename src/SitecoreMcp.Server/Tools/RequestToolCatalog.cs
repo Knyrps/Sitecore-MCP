@@ -1,6 +1,6 @@
 using System.Collections.Generic;
 using Newtonsoft.Json.Linq;
-using Sitecore.Diagnostics;
+using SitecoreMcp.Server.Diagnostics;
 using SitecoreMcp.Server.Protocol;
 using SitecoreMcp.Server.Schema;
 
@@ -68,7 +68,7 @@ namespace SitecoreMcp.Server.Tools
             catch (System.Exception ex)
             {
                 // Unexpected: log the full detail, return something safe unless verbose is on.
-                Log.Error($"[SitecoreMcp] Tool '{name}' failed.", ex, this);
+                McpLog.Error($"Tool '{name}' failed.", ex);
                 return McpToolResult.Failure(_context.Settings.VerboseErrors
                     ? ex.ToString()
                     : "The tool failed unexpectedly. See the Sitecore log.");

@@ -22,6 +22,10 @@
       <HintPath>$(SitecoreBinPath)\Newtonsoft.Json.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <Reference Include="Sitecore.Logging">
+      <HintPath>$(SitecoreBinPath)\Sitecore.Logging.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
   </ItemGroup>
 
   <Target Name="VerifySitecoreReferences" BeforeTargets="ResolveAssemblyReferences">

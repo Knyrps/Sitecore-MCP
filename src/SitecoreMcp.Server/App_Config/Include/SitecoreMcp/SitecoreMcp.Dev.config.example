@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  ============================================================================================
+  LOCAL DEVELOPMENT ONLY. DO NOT DEPLOY TO ANY SHARED OR PRODUCTION INSTANCE.
+  ============================================================================================
+
+  This patch enables the endpoint, turns OFF the HTTPS requirement (most local instances are
+  HTTP), turns ON writes, and registers a client mapped to the sitecore\admin user.
+
+  To use it:
+    1. Copy this file to SitecoreMcp.Dev.config (drop the .example extension).
+    2. Set the SITECORE_MCP_KEY environment variable to a secret of your choosing.
+    3. Recycle the app pool.
+
+  On a shared instance you would instead: leave RequireHttps on, map the client to a dedicated
+  Sitecore user with only the permissions it needs, and grant writes only if truly required.
+-->
+<configuration xmlns:patch="http://www.sitecore.net/xmlconfig/">
+  <sitecore>
+
+    <settings>
+      <setting name="Mcp.Enabled">
+        <patch:attribute name="value">true</patch:attribute>
+      </setting>
+      <setting name="Mcp.RequireHttps">
+        <patch:attribute name="value">false</patch:attribute>
+      </setting>
+      <setting name="Mcp.AllowWrites">
+        <patch:attribute name="value">true</patch:attribute>
+      </setting>
+      <setting name="Mcp.VerboseErrors">
+        <patch:attribute name="value">true</patch:attribute>
+      </setting>
+    </settings>
+
+    <sitecoreMcp>
+      <clients>
+        <client keyEnvVar="SITECORE_MCP_KEY" user="sitecore\admin" allowWrites="true" databases="master|web|core" />
+      </clients>
+    </sitecoreMcp>
+
+  </sitecore>
+</configuration>

@@ -2,8 +2,8 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading;
-using Sitecore.Diagnostics;
 using Sitecore.Security.Accounts;
+using SitecoreMcp.Server.Diagnostics;
 using SitecoreMcp.Server.Protocol;
 using SitecoreMcp.Server.Tools;
 
@@ -57,7 +57,7 @@ namespace SitecoreMcp.Server.Transport
             var client = _authenticator.Authenticate(request);
             if (client == null)
             {
-                Log.Warn($"[SitecoreMcp] Rejected unauthenticated request from {request.RemoteAddress}.", this);
+                McpLog.Warn($"Rejected unauthenticated request from {request.RemoteAddress}.");
                 return Error(401, JsonRpcErrorCodes.InvalidRequest, "Authentication is required.",
                     Header("WWW-Authenticate", "Bearer"));
             }
@@ -104,7 +104,7 @@ namespace SitecoreMcp.Server.Transport
         {
             if (!User.Exists(client.UserName))
             {
-                Log.Error($"[SitecoreMcp] Configured user '{client.UserName}' does not exist.", this);
+                McpLog.Error($"Configured user '{client.UserName}' does not exist.");
                 return Error(500, JsonRpcErrorCodes.InternalError, "The configured MCP user does not exist.");
             }
 
@@ -131,10 +131,9 @@ namespace SitecoreMcp.Server.Transport
                 ? envelope.Params?.Value<string>("name") ?? "(unknown)"
                 : envelope.Method;
 
-            Log.Audit(
-                $"[SitecoreMcp] user={client.UserName} method={envelope.Method} target={target} " +
-                $"status={outcome.StatusCode} durationMs={elapsedMs}",
-                typeof(McpRequestPipeline));
+            McpLog.Audit(
+                $"user={client.UserName} method={envelope.Method} target={target} " +
+                $"status={outcome.StatusCode} durationMs={elapsedMs}");
         }
 
         private static IReadOnlyDictionary<string, string> Header(string name, string value) =>
