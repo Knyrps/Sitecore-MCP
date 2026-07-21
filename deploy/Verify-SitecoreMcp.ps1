@@ -3,13 +3,13 @@
   Smoke-tests a deployed SitecoreMCP endpoint: initialize, tools/list, and get_context.
 
 .PARAMETER Url
-  The endpoint URL, e.g. http://local.knh.de/sitecore/api/mcp
+  The endpoint URL, e.g. https://sitecore.local/sitecore/api/mcp
 
 .PARAMETER Key
   The API key configured for a client.
 
 .EXAMPLE
-  ./Verify-SitecoreMcp.ps1 -Url http://local.knh.de/sitecore/api/mcp -Key <key>
+  ./Verify-SitecoreMcp.ps1 -Url https://sitecore.local/sitecore/api/mcp -Key <key>
 #>
 [CmdletBinding()]
 param(

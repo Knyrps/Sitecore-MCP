@@ -6,9 +6,9 @@
     <Deterministic>true</Deterministic>
   </PropertyGroup>
 
-  <!-- Override in Directory.Build.user.props (gitignored) to point at your own instance. -->
+  <!-- Point this at your own Sitecore instance in Directory.Build.user.props (gitignored). -->
   <PropertyGroup>
-    <SitecoreWebRoot Condition="'$(SitecoreWebRoot)' == ''">C:\inetpub\wwwroot\blickle1041cm.dev.local</SitecoreWebRoot>
+    <SitecoreWebRoot Condition="'$(SitecoreWebRoot)' == ''">C:\inetpub\wwwroot\sitecore.local</SitecoreWebRoot>
     <SitecoreBinPath>$(SitecoreWebRoot)\bin</SitecoreBinPath>
   </PropertyGroup>
 

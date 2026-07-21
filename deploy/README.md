@@ -11,7 +11,7 @@ app-pool environment, and app-pool recycling are all admin-only.
    ```xml
    <Project>
      <PropertyGroup>
-       <SitecoreWebRoot>C:\inetpub\wwwroot\local.knh.de</SitecoreWebRoot>
+       <SitecoreWebRoot>C:\inetpub\wwwroot\sitecore.local</SitecoreWebRoot>
      </PropertyGroup>
    </Project>
    ```
@@ -27,7 +27,7 @@ app-pool environment, and app-pool recycling are all admin-only.
 2. From an **elevated** PowerShell, deploy and enable it locally:
 
    ```powershell
-   ./deploy/Deploy-SitecoreMcp.ps1 -WebRoot C:\inetpub\wwwroot\local.knh.de
+   ./deploy/Deploy-SitecoreMcp.ps1 -WebRoot C:\inetpub\wwwroot\sitecore.local
    ```
 
    This copies the DLL and `SitecoreMcp.config`, writes a `SitecoreMcp.Dev.config` that enables the
@@ -37,7 +37,7 @@ app-pool environment, and app-pool recycling are all admin-only.
 3. Verify:
 
    ```powershell
-   ./deploy/Verify-SitecoreMcp.ps1 -Url http://local.knh.de/sitecore/api/mcp -Key <printed-key>
+   ./deploy/Verify-SitecoreMcp.ps1 -Url https://sitecore.local/sitecore/api/mcp -Key <printed-key>
    ```
 
    Expect an `initialize` result, four tools listed, and a `sitecore_get_context` payload with the

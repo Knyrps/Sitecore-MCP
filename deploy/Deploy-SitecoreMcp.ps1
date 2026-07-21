@@ -11,7 +11,7 @@
   LOCAL instance only. Do not run this against a shared or production instance.
 
 .PARAMETER WebRoot
-  The Sitecore web root, e.g. C:\inetpub\wwwroot\local.knh.de
+  The Sitecore web root, e.g. C:\inetpub\wwwroot\sitecore.local
 
 .PARAMETER Configuration
   Build configuration to deploy from (default Release).
@@ -23,7 +23,7 @@
   The IIS app pool name. Auto-detected from the site binding when omitted.
 
 .EXAMPLE
-  ./Deploy-SitecoreMcp.ps1 -WebRoot C:\inetpub\wwwroot\local.knh.de
+  ./Deploy-SitecoreMcp.ps1 -WebRoot C:\inetpub\wwwroot\sitecore.local
 #>
 [CmdletBinding()]
 param(

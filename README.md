@@ -67,3 +67,7 @@ Point the build at your own instance by creating `Directory.Build.user.props` (g
 ```
 
 Deployment is opt-in so a plain build never writes into a live web root.
+
+## License
+
+MIT — see [LICENSE](LICENSE).
