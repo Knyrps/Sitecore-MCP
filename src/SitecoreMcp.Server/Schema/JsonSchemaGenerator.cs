@@ -85,6 +85,16 @@ namespace SitecoreMcp.Server.Schema
                 return new JObject { ["type"] = primitive };
             }
 
+            // A string-keyed dictionary is an open-ended object, e.g. a field-name -> value map.
+            if (TryGetDictionaryValueType(type, out var valueType))
+            {
+                return new JObject
+                {
+                    ["type"] = "object",
+                    ["additionalProperties"] = BuildProperty(valueType, null, seen)
+                };
+            }
+
             if (TryGetElementType(type, out var elementType))
             {
                 return new JObject
@@ -107,6 +117,25 @@ namespace SitecoreMcp.Server.Schema
                 type == typeof(long) || type == typeof(ulong)) return "integer";
             if (type == typeof(float) || type == typeof(double) || type == typeof(decimal)) return "number";
             return null;
+        }
+
+        private static bool TryGetDictionaryValueType(Type type, out Type valueType)
+        {
+            valueType = null;
+
+            var dictionary = new[] { type }
+                .Concat(type.GetInterfaces())
+                .FirstOrDefault(i => i.IsGenericType &&
+                    (i.GetGenericTypeDefinition() == typeof(IDictionary<,>) ||
+                     i.GetGenericTypeDefinition() == typeof(IReadOnlyDictionary<,>)));
+
+            if (dictionary == null || dictionary.GetGenericArguments()[0] != typeof(string))
+            {
+                return false;
+            }
+
+            valueType = dictionary.GetGenericArguments()[1];
+            return true;
         }
 
         private static bool TryGetElementType(Type type, out Type elementType)

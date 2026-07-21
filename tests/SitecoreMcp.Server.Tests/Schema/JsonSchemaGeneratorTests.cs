@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using Newtonsoft.Json;
 using SitecoreMcp.Server.Schema;
 using Xunit;
@@ -6,6 +7,12 @@ namespace SitecoreMcp.Server.Tests.Schema
 {
     public class JsonSchemaGeneratorTests
     {
+        private sealed class MapArgs
+        {
+            [McpParam(Description = "Field map.")]
+            public Dictionary<string, string> Fields { get; set; }
+        }
+
         private sealed class SampleArgs
         {
             [McpParam(Description = "The item path.", Required = true)]
@@ -52,6 +59,15 @@ namespace SitecoreMcp.Server.Tests.Schema
             Assert.Equal("array", (string)properties["fields"]["type"]);
             Assert.Equal("string", (string)properties["fields"]["items"]["type"]);
             Assert.Equal("web", properties["database"]["enum"][1]);
+        }
+
+        [Fact]
+        public void Maps_a_string_dictionary_to_an_open_object()
+        {
+            var fields = JsonSchemaGenerator.Generate(typeof(MapArgs))["properties"]["fields"];
+
+            Assert.Equal("object", (string)fields["type"]);
+            Assert.Equal("string", (string)fields["additionalProperties"]["type"]);
         }
 
         [Fact]
