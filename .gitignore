@@ -1,0 +1,8 @@
+bin/
+obj/
+.vs/
+*.user
+*.user.props
+*.suo
+artifacts/
+TestResults/

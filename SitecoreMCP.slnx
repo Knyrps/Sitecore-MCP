@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/SitecoreMcp.Bridge/SitecoreMcp.Bridge.csproj" />
+    <Project Path="src/SitecoreMcp.Server/SitecoreMcp.Server.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/SitecoreMcp.Server.Tests/SitecoreMcp.Server.Tests.csproj" />
+  </Folder>
+</Solution>
