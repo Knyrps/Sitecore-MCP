@@ -7,12 +7,13 @@
   </PropertyGroup>
 
   <!-- Point this at your own Sitecore instance in Directory.Build.user.props (gitignored). -->
+  <Import Project="$(MSBuildThisFileDirectory)Directory.Build.user.props"
+          Condition="Exists('$(MSBuildThisFileDirectory)Directory.Build.user.props')" />
+
+  <!-- Derive the bin path AFTER the import, so a user override reaches SitecoreBinPath. -->
   <PropertyGroup>
     <SitecoreWebRoot Condition="'$(SitecoreWebRoot)' == ''">C:\inetpub\wwwroot\sitecore.local</SitecoreWebRoot>
     <SitecoreBinPath>$(SitecoreWebRoot)\bin</SitecoreBinPath>
   </PropertyGroup>
-
-  <Import Project="$(MSBuildThisFileDirectory)Directory.Build.user.props"
-          Condition="Exists('$(MSBuildThisFileDirectory)Directory.Build.user.props')" />
 
 </Project>
