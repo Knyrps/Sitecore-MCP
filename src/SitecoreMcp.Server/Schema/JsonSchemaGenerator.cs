@@ -36,7 +36,7 @@ namespace SitecoreMcp.Server.Schema
                 if (property.GetCustomAttribute<JsonIgnoreAttribute>() != null) continue;
 
                 var meta = property.GetCustomAttribute<McpParamAttribute>();
-                var name = PropertyName(property);
+                var name = JsonNaming.ToJsonName(property);
 
                 var schema = BuildProperty(property.PropertyType, meta, seen);
                 if (!string.IsNullOrEmpty(meta?.Description))
@@ -132,17 +132,6 @@ namespace SitecoreMcp.Server.Schema
 
             // Non-generic IEnumerable has no element type to describe; treat it as a nested object.
             return false;
-        }
-
-        private static string PropertyName(PropertyInfo property)
-        {
-            var jsonProperty = property.GetCustomAttribute<JsonPropertyAttribute>();
-            if (!string.IsNullOrEmpty(jsonProperty?.PropertyName))
-            {
-                return jsonProperty.PropertyName;
-            }
-
-            return char.ToLowerInvariant(property.Name[0]) + property.Name.Substring(1);
         }
     }
 }

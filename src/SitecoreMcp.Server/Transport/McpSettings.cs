@@ -30,6 +30,9 @@ namespace SitecoreMcp.Server.Transport
         /// <summary>The maximum accepted request body size in bytes.</summary>
         public long MaxRequestBytes { get; set; } = 1024 * 1024;
 
+        /// <summary>The global write switch. Off by default; a client's own AllowWrites is ANDed with this.</summary>
+        public bool AllowWrites { get; set; }
+
         /// <summary>The maximum number of tool calls executed concurrently before further calls are shed.</summary>
         public int MaxConcurrentCalls { get; set; } = 4;
 
