@@ -9,13 +9,22 @@ namespace SitecoreMcp.Server.Protocol
     /// </summary>
     public sealed class McpRequestEnvelope
     {
+        /// <summary>The JSON-RPC method name, available before dispatch so the transport can gate and audit on it.</summary>
         public string Method { get; private set; }
+
+        /// <summary>The request id to echo, or null for a notification.</summary>
         public JToken Id { get; private set; }
+
+        /// <summary>The params object, or null when the message carried none.</summary>
         public JObject Params { get; private set; }
 
         /// <summary>A message with no "id" member. Never produces a response body.</summary>
         public bool IsNotification { get; private set; }
 
+        /// <summary>
+        /// Parses and validates one JSON-RPC message. Returns false with a ready-to-send
+        /// <paramref name="failure"/> outcome when the body is malformed or not a valid request.
+        /// </summary>
         public static bool TryParse(string body, out McpRequestEnvelope envelope, out DispatchOutcome failure)
         {
             envelope = null;

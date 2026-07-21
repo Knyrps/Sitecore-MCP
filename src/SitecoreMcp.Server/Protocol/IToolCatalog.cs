@@ -13,9 +13,13 @@ namespace SitecoreMcp.Server.Protocol
         /// <summary>Tools the current caller may use. Tools they cannot use must not appear.</summary>
         IReadOnlyList<ToolDescriptor> List();
 
+        /// <summary>Whether a tool with the given name is available to the current caller.</summary>
         bool Contains(string name);
 
-        /// <summary>Must not throw: execution failures belong in an <see cref="McpToolResult.IsError"/> result.</summary>
+        /// <summary>
+        /// Runs the named tool with the given arguments. Must not throw: execution failures
+        /// belong in an <see cref="McpToolResult.IsError"/> result.
+        /// </summary>
         McpToolResult Invoke(string name, JObject arguments);
     }
 }

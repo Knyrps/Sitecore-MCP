@@ -3,12 +3,14 @@ using Newtonsoft.Json.Linq;
 
 namespace SitecoreMcp.Server.Protocol
 {
+    /// <summary>Routes a parsed MCP message to the right handler and shapes the response.</summary>
     public sealed class McpDispatcher
     {
         private readonly IToolCatalog _catalog;
         private readonly string _serverName;
         private readonly string _serverVersion;
 
+        /// <summary>Creates a dispatcher over the given tool catalog, reporting the supplied server identity in initialize.</summary>
         public McpDispatcher(IToolCatalog catalog, string serverName, string serverVersion)
         {
             _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
@@ -16,6 +18,7 @@ namespace SitecoreMcp.Server.Protocol
             _serverVersion = serverVersion;
         }
 
+        /// <summary>Handles one request and returns the outcome to send, including 202 for notifications.</summary>
         public DispatchOutcome Dispatch(McpRequestEnvelope request)
         {
             if (request == null) throw new ArgumentNullException(nameof(request));
