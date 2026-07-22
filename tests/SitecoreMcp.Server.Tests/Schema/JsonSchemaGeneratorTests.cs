@@ -32,12 +32,14 @@ namespace SitecoreMcp.Server.Tests.Schema
         }
 
         [Fact]
-        public void Generates_object_with_strict_additional_properties()
+        public void Generates_a_lenient_object_so_cached_schemas_stay_forward_compatible()
         {
             var schema = JsonSchemaGenerator.Generate(typeof(SampleArgs));
 
             Assert.Equal("object", (string)schema["type"]);
-            Assert.False((bool)schema["additionalProperties"]);
+            // No additionalProperties:false, so a client with a stale schema can still pass a
+            // newly-added parameter without a client-side rejection.
+            Assert.Null(schema["additionalProperties"]);
         }
 
         [Fact]

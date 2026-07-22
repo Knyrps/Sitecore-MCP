@@ -51,11 +51,14 @@ namespace SitecoreMcp.Server.Schema
                 }
             }
 
+            // Deliberately lenient (no "additionalProperties": false). MCP clients cache tool
+            // schemas, so a strict schema makes any later-added parameter hard-reject on the client
+            // until it re-fetches. The server ignores unknown arguments, so leniency is safe and
+            // keeps schema evolution non-breaking for callers holding a stale schema.
             var result = new JObject
             {
                 ["type"] = "object",
-                ["properties"] = properties,
-                ["additionalProperties"] = false
+                ["properties"] = properties
             };
             if (required.Count > 0)
             {
