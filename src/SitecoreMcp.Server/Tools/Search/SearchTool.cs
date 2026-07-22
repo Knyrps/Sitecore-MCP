@@ -100,8 +100,9 @@ namespace SitecoreMcp.Server.Tools.Search
         public override string Description =>
             "Search a ContentSearch index by any combination of item name (exact or partial), free text, " +
             "template, subtree, language, indexed-field equality, and created/updated date ranges. To " +
-            "find an item by its name use 'name', not free text. Sort by a field, page results, or pass " +
-            "countOnly for just the total. Prefer this over tree walking to locate items.";
+            "find an item by its name use 'name', not free text. Hits are grouped by item, each " +
+            "listing the languages it matched. Sort by a field, page results, or pass countOnly for " +
+            "just the total. Prefer this over tree walking to locate items.";
 
         /// <inheritdoc />
         protected override McpToolResult Execute(SearchArgs args, McpCallContext context)
@@ -150,20 +151,41 @@ namespace SitecoreMcp.Server.Tools.Search
 
                 var results = query.Skip(offset).Take(limit).GetResults();
 
-                var hits = new JArray();
+                // The index holds one document per item/language/version, so collapse those into one
+                // hit per item that lists the languages it matched — otherwise a page is mostly the
+                // same items repeated, which inflates counts and buries what the caller is after.
+                var order = new List<string>();
+                var byItem = new Dictionary<string, JObject>(StringComparer.OrdinalIgnoreCase);
+                var rawCount = 0;
                 foreach (var hit in results.Hits)
                 {
+                    rawCount++;
                     var doc = hit.Document;
-                    hits.Add(new JObject
+                    var id = doc.ItemId?.ToString() ?? System.Guid.NewGuid().ToString("B");
+
+                    if (!byItem.TryGetValue(id, out var entry))
                     {
-                        ["id"] = doc.ItemId?.ToString(),
-                        ["name"] = doc.Name,
-                        ["path"] = doc.Path,
-                        ["templateName"] = doc.TemplateName,
-                        ["language"] = doc.Language,
-                        ["score"] = hit.Score
-                    });
+                        entry = new JObject
+                        {
+                            ["id"] = id,
+                            ["name"] = doc.Name,
+                            ["path"] = doc.Path,
+                            ["templateName"] = doc.TemplateName,
+                            ["score"] = hit.Score,
+                            ["languages"] = new JArray()
+                        };
+                        byItem[id] = entry;
+                        order.Add(id);
+                    }
+
+                    var languages = (JArray)entry["languages"];
+                    if (!string.IsNullOrEmpty(doc.Language) && !languages.Any(l => (string)l == doc.Language))
+                    {
+                        languages.Add(doc.Language);
+                    }
                 }
+
+                var hits = new JArray(order.Select(id => (object)byItem[id]).ToArray());
 
                 var searchResult = new JObject
                 {
@@ -171,7 +193,7 @@ namespace SitecoreMcp.Server.Tools.Search
                     ["total"] = results.TotalSearchResults,
                     ["offset"] = offset,
                     ["count"] = hits.Count,
-                    ["hasMore"] = offset + hits.Count < results.TotalSearchResults,
+                    ["hasMore"] = offset + rawCount < results.TotalSearchResults,
                     ["hits"] = hits
                 };
                 if (templateInfo != null) searchResult["resolvedTemplate"] = templateInfo;
