@@ -88,4 +88,4 @@ Restart-WebAppPool -Name $AppPool
 
 Write-Host ""
 Write-Host "Deployed. Verify with:" -ForegroundColor Green
-Write-Host "  ./deploy/Verify-SitecoreMcp.ps1 -Url http://<host>/sitecore/api/mcp -Key $Key"
+Write-Host "  ./deploy/Verify-SitecoreMcp.ps1 -Url http[s]://<host>/sitecore/api/mcp -Key $Key"

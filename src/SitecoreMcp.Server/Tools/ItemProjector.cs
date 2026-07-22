@@ -47,11 +47,16 @@ namespace SitecoreMcp.Server.Tools
         }
 
         /// <summary>
-        /// Projects an item with its fields. When <paramref name="requestedFields"/> is given, only
-        /// those fields are returned (including empty ones); otherwise every populated, readable,
-        /// non-standard field is returned.
+        /// Projects an item with its fields. When <paramref name="requestedFields"/> is given, exactly
+        /// those fields are returned (including empty and standard ones). Otherwise the default view is
+        /// populated, non-standard fields, widened by <paramref name="includeStandardFields"/> (the
+        /// __-prefixed standard fields) and <paramref name="includeEmpty"/> (fields with no value).
         /// </summary>
-        public JObject ProjectWithFields(Item item, IReadOnlyCollection<string> requestedFields)
+        public JObject ProjectWithFields(
+            Item item,
+            IReadOnlyCollection<string> requestedFields,
+            bool includeStandardFields = false,
+            bool includeEmpty = false)
         {
             var result = ProjectSummary(item);
             var fields = new JObject();
@@ -73,8 +78,12 @@ namespace SitecoreMcp.Server.Tools
                 }
                 else
                 {
-                    // Default view: skip standard (__) fields and anything without a value.
-                    if (field.Name.StartsWith("__") || string.IsNullOrEmpty(field.Value))
+                    if (!includeStandardFields && field.Name.StartsWith("__"))
+                    {
+                        continue;
+                    }
+
+                    if (!includeEmpty && string.IsNullOrEmpty(field.Value))
                     {
                         continue;
                     }
