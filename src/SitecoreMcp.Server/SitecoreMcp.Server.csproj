@@ -26,6 +26,14 @@
       <HintPath>$(SitecoreBinPath)\Sitecore.Logging.dll</HintPath>
       <Private>false</Private>
     </Reference>
+    <Reference Include="Sitecore.ContentSearch">
+      <HintPath>$(SitecoreBinPath)\Sitecore.ContentSearch.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Sitecore.ContentSearch.Linq">
+      <HintPath>$(SitecoreBinPath)\Sitecore.ContentSearch.Linq.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
   </ItemGroup>
 
   <Target Name="VerifySitecoreReferences" BeforeTargets="ResolveAssemblyReferences">
