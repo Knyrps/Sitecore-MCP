@@ -71,6 +71,13 @@ correct `_name` field.
 - **`delete_item`** — **recycles** by default (recoverable from the Recycle Bin). `permanent: true`
   destroys the item and its subtree irreversibly.
 
+**Item locking.** Field edits (`update_item`, `rename_item`, `create_item`'s initial fields) are
+lock-aware. Admins bypass it. For a non-admin on an instance with `RequireLockBeforeEditing`, the
+tool locks the item, edits, then restores the prior lock state (unlocking if it wasn't locked
+before, unless `AutomaticUnlockOnSaved` already did). A write to an item **locked by another user**
+is refused with the owner named, and a save Sitecore rejects (lock/workflow) is reported as an
+error — never a silent success. Move/copy/rename/delete structural ops are not gated by this.
+
 ## Search — the full query surface
 
 `sitecore_search` combines any of: `name` / `nameContains`, `text`, `template`, `rootPath`,
