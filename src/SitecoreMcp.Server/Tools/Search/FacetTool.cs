@@ -130,13 +130,14 @@ namespace SitecoreMcp.Server.Tools.Search
                     ["values"] = values
                 };
 
-                // A raw field name that yields nothing is usually a wrong indexed-field name rather
-                // than a genuinely empty facet, so nudge the caller instead of returning a silent void.
-                if (values.Count == 0 && !IsFriendlyField(args.Field) && results.TotalSearchResults > 0)
+                // A raw field name that yields nothing is often a wrong indexed-field name (Solr
+                // returns nothing for an unknown facet field, which also zeroes totalMatched), so
+                // nudge the caller instead of returning a silent void.
+                if (values.Count == 0 && !IsFriendlyField(args.Field))
                 {
                     result["hint"] =
-                        $"No facet values for '{args.Field}'. It may not be an indexed field name. " +
-                        "Try 'template' or 'language', or use the exact Solr field name.";
+                        $"No values for '{args.Field}'. Either nothing matched, or '{args.Field}' is not " +
+                        "an indexed field name. Try 'template' or 'language', or use the exact Solr field name.";
                 }
 
                 return McpToolResult.Structured(result);
