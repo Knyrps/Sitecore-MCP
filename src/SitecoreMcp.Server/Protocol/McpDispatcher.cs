@@ -66,7 +66,8 @@ namespace SitecoreMcp.Server.Protocol
                 {
                     ["name"] = _serverName,
                     ["version"] = _serverVersion
-                }
+                },
+                ["instructions"] = McpServerInstructions.Text
             };
         }
 

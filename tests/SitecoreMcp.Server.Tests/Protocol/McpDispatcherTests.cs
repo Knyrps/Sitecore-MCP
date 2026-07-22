@@ -27,6 +27,7 @@ namespace SitecoreMcp.Server.Tests.Protocol
             Assert.Equal("2025-03-26", result["protocolVersion"]);
             Assert.NotNull(result["capabilities"]["tools"]);
             Assert.Equal("TestServer", result["serverInfo"]["name"]);
+            Assert.False(string.IsNullOrEmpty((string)result["instructions"]));
         }
 
         [Fact]
