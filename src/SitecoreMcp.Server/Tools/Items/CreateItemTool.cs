@@ -63,17 +63,7 @@ namespace SitecoreMcp.Server.Tools.Items
                 return McpToolResult.Failure($"'{parent.Paths.FullPath}' already has a child named '{args.Name}'.");
             }
 
-            var templateItem = parent.Database.GetItem(args.Template);
-            if (templateItem == null)
-            {
-                return McpToolResult.Failure($"Template '{args.Template}' was not found.");
-            }
-
-            if (templateItem.TemplateID != Sitecore.TemplateIDs.Template)
-            {
-                return McpToolResult.Failure($"'{templateItem.Paths.FullPath}' is not a template.");
-            }
-
+            var templateItem = TemplateResolver.Resolve(parent.Database, args.Template);
             var created = parent.Add(args.Name, new TemplateID(templateItem.ID));
             if (args.Fields != null && args.Fields.Count > 0)
             {

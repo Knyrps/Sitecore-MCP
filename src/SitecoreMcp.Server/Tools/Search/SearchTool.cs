@@ -168,13 +168,7 @@ namespace SitecoreMcp.Server.Tools.Search
 
             if (!string.IsNullOrEmpty(args.Template))
             {
-                var templateItem = db.GetItem(args.Template);
-                if (templateItem == null)
-                {
-                    throw new McpToolException($"Template '{args.Template}' was not found.");
-                }
-
-                var templateId = templateItem.ID;
+                var templateId = TemplateResolver.Resolve(db, args.Template).ID;
                 query = query.Where(i => i.TemplateId == templateId);
             }
 

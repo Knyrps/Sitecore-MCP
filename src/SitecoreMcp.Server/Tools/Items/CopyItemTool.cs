@@ -50,7 +50,10 @@ namespace SitecoreMcp.Server.Tools.Items
             try
             {
                 var copy = item.CopyTo(destination, name, ID.NewID, deep);
-                return McpToolResult.Structured(new ItemProjector(context).ProjectSummary(copy));
+                var result = new ItemProjector(context).ProjectSummary(copy);
+                result["childCount"] = copy.Children.Count;
+                result["deep"] = deep;
+                return McpToolResult.Structured(result);
             }
             catch (System.Exception ex)
             {

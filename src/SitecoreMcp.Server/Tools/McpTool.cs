@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Reflection;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -39,13 +41,46 @@ namespace SitecoreMcp.Server.Tools
                 return McpToolResult.Failure("Invalid arguments: " + ex.Message);
             }
 
-            var missing = FirstMissingRequired(arguments ?? new JObject());
+            var supplied = arguments ?? new JObject();
+            var missing = FirstMissingRequired(supplied);
             if (missing != null)
             {
                 return McpToolResult.Failure($"Missing required argument '{missing}'.");
             }
 
-            return Execute(typed, context);
+            var result = Execute(typed, context);
+            NoteIgnoredArguments(result, supplied);
+            return result;
+        }
+
+        /// <summary>
+        /// Adds a note when the caller supplied arguments this tool does not define. Schemas are
+        /// lenient (unknown args are dropped), so without this a misplaced argument fails silently.
+        /// </summary>
+        private void NoteIgnoredArguments(McpToolResult result, JObject supplied)
+        {
+            if (result == null || result.IsError)
+            {
+                return;
+            }
+
+            var known = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var property in typeof(TArgs).GetProperties(BindingFlags.Public | BindingFlags.Instance))
+            {
+                known.Add(JsonNaming.ToJsonName(property));
+            }
+
+            var ignored = supplied.Properties()
+                .Select(p => p.Name)
+                .Where(name => !known.Contains(name))
+                .ToList();
+
+            if (ignored.Count > 0)
+            {
+                result.Content.Add(McpContent.FromText(
+                    $"Note: these arguments are not defined by {Name} and were ignored: " +
+                    $"{string.Join(", ", ignored)}. Check the tool's inputSchema."));
+            }
         }
 
         /// <summary>Runs the tool with validated, strongly-typed arguments.</summary>
