@@ -21,7 +21,7 @@ Verified on 10.3 (Kernel 18.0.0.0) and 10.4 (Kernel 19.0.0.0).
 MCP client (Claude Code, Copilot)
       │  stdio JSON-RPC
       ▼
-SitecoreMcp.Bridge            ← optional; only for clients that cannot speak HTTP
+SitecoreMcp.Bridge            ← optional; only for clients that cannot speak HTTP or local development environments where CA Certs are self-signed and therefore not supported by your calling runtime (e.g. VSCode Node, OpenCode Bun etc.)
       │  HTTP POST /sitecore/api/mcp
       ▼
 SitecoreMcp.Server (in the Sitecore worker process)
