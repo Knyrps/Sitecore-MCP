@@ -17,8 +17,8 @@ namespace SitecoreMcp.Server.Tools.Items
         [McpParam(Description = "Name of the new item.", Required = true)]
         public string Name { get; set; }
 
-        /// <summary>The template to base the new item on, by path or ID.</summary>
-        [McpParam(Description = "Template path or ID for the new item.", Required = true)]
+        /// <summary>The template to base the new item on, by path, ID, or name.</summary>
+        [McpParam(Description = "Template for the new item, by path, ID, or name (exact, or a unique partial name).", Required = true)]
         public string Template { get; set; }
 
         /// <summary>The database to create in; defaults to master.</summary>

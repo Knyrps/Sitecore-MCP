@@ -34,28 +34,55 @@ namespace SitecoreMcp.Server.Tools
                 throw new McpToolException($"'{item.Paths.FullPath}' is not a template.");
             }
 
-            // Otherwise treat the reference as a template name.
-            var byName = TemplateManager.GetTemplates(db).Values
+            // Otherwise treat the reference as a template name: an exact name match wins; failing
+            // that, a unique partial match resolves (so "Local Datasource" finds "Local Datasource
+            // Folder"), and anything ambiguous is reported with its candidates.
+            var templates = TemplateManager.GetTemplates(db).Values.ToList();
+
+            var exact = templates
                 .Where(t => string.Equals(t.Name, reference, StringComparison.OrdinalIgnoreCase))
                 .ToList();
-
-            if (byName.Count == 1)
+            if (TryResolveSingle(db, exact, out var exactItem))
             {
-                var resolved = db.GetItem(byName[0].ID);
-                if (resolved != null)
-                {
-                    return resolved;
-                }
+                return exactItem;
+            }
+            if (exact.Count > 1)
+            {
+                throw Ambiguous(reference, exact);
             }
 
-            if (byName.Count > 1)
+            var partial = templates
+                .Where(t => t.Name.IndexOf(reference, StringComparison.OrdinalIgnoreCase) >= 0)
+                .ToList();
+            if (TryResolveSingle(db, partial, out var partialItem))
             {
-                var candidates = string.Join(", ", byName.Select(t => t.FullName).Take(10));
-                throw new McpToolException(
-                    $"Template name '{reference}' is ambiguous. Matches: {candidates}. Use a full path or ID.");
+                return partialItem;
+            }
+            if (partial.Count > 1)
+            {
+                throw Ambiguous(reference, partial);
             }
 
             throw new McpToolException($"Template '{reference}' was not found by path, ID, or name.");
+        }
+
+        private static bool TryResolveSingle(Database db, System.Collections.Generic.List<Sitecore.Data.Templates.Template> matches, out Item item)
+        {
+            item = null;
+            if (matches.Count != 1)
+            {
+                return false;
+            }
+
+            item = db.GetItem(matches[0].ID);
+            return item != null;
+        }
+
+        private static McpToolException Ambiguous(string reference, System.Collections.Generic.List<Sitecore.Data.Templates.Template> matches)
+        {
+            var candidates = string.Join(", ", matches.Select(t => t.FullName).Take(10));
+            return new McpToolException(
+                $"Template name '{reference}' is ambiguous. Matches: {candidates}. Use a full path or ID.");
         }
     }
 }

@@ -18,8 +18,8 @@ namespace SitecoreMcp.Server.Tools.Search
         [McpParam(Description = "Free text to match against item content.")]
         public string Text { get; set; }
 
-        /// <summary>Restrict to items of a given template, by path or ID.</summary>
-        [McpParam(Description = "Restrict to a template, by path or ID.")]
+        /// <summary>Restrict to items of a given template, by path, ID, or name.</summary>
+        [McpParam(Description = "Restrict to a template by path, ID, or name (exact, or a unique partial name).")]
         public string Template { get; set; }
 
         /// <summary>Restrict to descendants of this item, by path or ID.</summary>
