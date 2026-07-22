@@ -39,16 +39,24 @@ namespace SitecoreMcp.Server.Tools
 
                 if (!saved)
                 {
+                    var locking = item.Locking;
+                    if (locking.IsLocked() && !locking.HasLock())
+                    {
+                        throw new McpToolException(
+                            $"The edit was not saved: the item is locked by '{locking.GetOwner()}'.");
+                    }
+
                     throw new McpToolException(
-                        "The edit was not saved. The item may require a lock, be locked by another user, " +
-                        "or be blocked by its workflow.");
+                        "The edit was not saved. The item may be blocked by its workflow, or require a lock the user does not hold.");
                 }
             }
             finally
             {
                 if (lockAcquired)
                 {
-                    RestoreUnlocked(item);
+                    // We took the lock, so always try to release it (harmless if AutomaticUnlockOnSaved
+                    // already did); never gate this on HasLock, which can misreport our own lock.
+                    try { item.Locking.Unlock(); } catch { }
                 }
             }
         }
@@ -102,6 +110,13 @@ namespace SitecoreMcp.Server.Tools
         /// </summary>
         private static bool EnsureEditable(Item item)
         {
+            // Admins bypass the lock requirement, and when the instance does not require a lock we let
+            // EndEdit (and AutomaticLockOnSave, if set) handle it. No proactive locking in either case.
+            if (Sitecore.Context.User.IsAdministrator || !Settings.RequireLockBeforeEditing)
+            {
+                return false;
+            }
+
             var locking = item.Locking;
 
             if (locking.HasLock())
@@ -109,40 +124,21 @@ namespace SitecoreMcp.Server.Tools
                 return false;
             }
 
+            // Lock() is the authoritative test: it succeeds for an unlocked item (and re-taking our own
+            // lock), and only fails when the item genuinely cannot be locked. Do not pre-judge on
+            // IsLocked, which can disagree with what Lock() will actually allow.
+            if (locking.Lock())
+            {
+                return true;
+            }
+
             if (locking.IsLocked())
             {
                 throw new McpToolException(
-                    $"Item is locked by '{locking.GetOwner()}'. It must be unlocked or checked in by that user first.");
+                    $"Item is locked by '{locking.GetOwner()}' and cannot be edited until it is released.");
             }
 
-            // Admins bypass the lock requirement; otherwise honor RequireLockBeforeEditing.
-            if (Sitecore.Context.User.IsAdministrator || !Settings.RequireLockBeforeEditing)
-            {
-                return false;
-            }
-
-            if (!locking.CanLock() || !locking.Lock())
-            {
-                throw new McpToolException("The item requires a lock before editing and could not be locked for the current user.");
-            }
-
-            return true;
-        }
-
-        private static void RestoreUnlocked(Item item)
-        {
-            // Best-effort: only unlock if we still hold it (AutomaticUnlockOnSaved may have released
-            // it already), and never let a restore failure mask the edit outcome.
-            try
-            {
-                if (item.Locking.HasLock())
-                {
-                    item.Locking.Unlock();
-                }
-            }
-            catch
-            {
-            }
+            throw new McpToolException("The item could not be locked for editing (the user may lack write access).");
         }
     }
 }
