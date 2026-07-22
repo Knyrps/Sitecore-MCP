@@ -18,6 +18,14 @@ namespace SitecoreMcp.Server.Tools.Search
         [McpParam(Description = "Free text to match against item content.")]
         public string Text { get; set; }
 
+        /// <summary>Find items whose item name equals this exactly.</summary>
+        [McpParam(Description = "Find items by exact item name (the surest way to locate an item by name).")]
+        public string Name { get; set; }
+
+        /// <summary>Find items whose item name contains this substring.</summary>
+        [McpParam(Description = "Find items whose item name contains this substring.")]
+        public string NameContains { get; set; }
+
         /// <summary>Restrict to items of a given template, by path, ID, or name.</summary>
         [McpParam(Description = "Restrict to a template by path, ID, or name (exact, or a unique partial name).")]
         public string Template { get; set; }
@@ -90,9 +98,10 @@ namespace SitecoreMcp.Server.Tools.Search
 
         /// <inheritdoc />
         public override string Description =>
-            "Search a ContentSearch index by any combination of free text, template, subtree, language, " +
-            "indexed-field equality, and created/updated date ranges. Sort by a field, page results, or " +
-            "pass countOnly for just the total. Prefer this over tree walking to locate items.";
+            "Search a ContentSearch index by any combination of item name (exact or partial), free text, " +
+            "template, subtree, language, indexed-field equality, and created/updated date ranges. To " +
+            "find an item by its name use 'name', not free text. Sort by a field, page results, or pass " +
+            "countOnly for just the total. Prefer this over tree walking to locate items.";
 
         /// <inheritdoc />
         protected override McpToolResult Execute(SearchArgs args, McpCallContext context)
@@ -180,6 +189,18 @@ namespace SitecoreMcp.Server.Tools.Search
             {
                 var text = args.Text;
                 query = query.Where(i => i.Content.Contains(text));
+            }
+
+            if (!string.IsNullOrEmpty(args.Name))
+            {
+                var name = args.Name;
+                query = query.Where(i => i.Name == name);
+            }
+
+            if (!string.IsNullOrEmpty(args.NameContains))
+            {
+                var nameContains = args.NameContains;
+                query = query.Where(i => i.Name.Contains(nameContains));
             }
 
             if (!string.IsNullOrEmpty(args.Template))
