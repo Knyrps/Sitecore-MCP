@@ -5,6 +5,12 @@ newline-delimited JSON-RPC from stdin, POSTs each message to the Sitecore endpoi
 the response to stdout. It is a dumb pipe — it holds no MCP logic and needs no MCP SDK.
 
 Clients that speak HTTP should point at the Sitecore endpoint directly and skip this entirely.
+On a local instance with a self-signed certificate, though, prefer the bridge: it is a .NET
+process and trusts the Windows certificate store, so it connects where a Node/Bun client would
+reject the cert.
+
+For the full end-to-end setup — including VS Code and opencode client config — see the
+**Local build & setup** section of the [root README](../../README.md).
 
 ## Configuration
 

@@ -4,6 +4,9 @@ The MCP server itself. A net48 assembly deployed to `<webroot>/bin`, plus config
 `<webroot>/App_Config/Include`. No `.ashx` and no Sitecore package — the endpoint is registered
 as an ASP.NET route from the `initialize` pipeline.
 
+To build, deploy, and connect a client, see the **Local build & setup** section of the
+[root README](../../README.md); this file covers the internal structure and design.
+
 ## Folders
 
 | Folder | Role |
