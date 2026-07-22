@@ -114,18 +114,29 @@ namespace SitecoreMcp.Server.Tools.Search
             using (var searchContext = index.CreateSearchContext())
             {
                 var query = searchContext.GetQueryable<SearchResultItem>();
-                query = ApplyFilters(query, db, args);
+                query = ApplyFilters(query, db, args, out var resolvedTemplate);
                 query = ApplySort(query, args);
+
+                // Echo the template the filter actually resolved to, so a caller that passed a name
+                // (possibly a partial one) learns and can report the real template.
+                JObject templateInfo = resolvedTemplate == null ? null : new JObject
+                {
+                    ["id"] = resolvedTemplate.ID.ToString(),
+                    ["name"] = resolvedTemplate.Name,
+                    ["path"] = resolvedTemplate.Paths.FullPath
+                };
 
                 if (args.CountOnly.GetValueOrDefault(false))
                 {
                     var total = query.Take(1).GetResults().TotalSearchResults;
-                    return McpToolResult.Structured(new JObject
+                    var countResult = new JObject
                     {
                         ["index"] = indexName,
                         ["total"] = total,
                         ["countOnly"] = true
-                    });
+                    };
+                    if (templateInfo != null) countResult["resolvedTemplate"] = templateInfo;
+                    return McpToolResult.Structured(countResult);
                 }
 
                 var results = query.Skip(offset).Take(limit).GetResults();
@@ -145,7 +156,7 @@ namespace SitecoreMcp.Server.Tools.Search
                     });
                 }
 
-                return McpToolResult.Structured(new JObject
+                var searchResult = new JObject
                 {
                     ["index"] = indexName,
                     ["total"] = results.TotalSearchResults,
@@ -153,13 +164,18 @@ namespace SitecoreMcp.Server.Tools.Search
                     ["count"] = hits.Count,
                     ["hasMore"] = offset + hits.Count < results.TotalSearchResults,
                     ["hits"] = hits
-                });
+                };
+                if (templateInfo != null) searchResult["resolvedTemplate"] = templateInfo;
+                return McpToolResult.Structured(searchResult);
             }
         }
 
         private static IQueryable<SearchResultItem> ApplyFilters(
-            IQueryable<SearchResultItem> query, Sitecore.Data.Database db, SearchArgs args)
+            IQueryable<SearchResultItem> query, Sitecore.Data.Database db, SearchArgs args,
+            out Sitecore.Data.Items.Item resolvedTemplate)
         {
+            resolvedTemplate = null;
+
             if (!string.IsNullOrEmpty(args.Text))
             {
                 var text = args.Text;
@@ -168,7 +184,8 @@ namespace SitecoreMcp.Server.Tools.Search
 
             if (!string.IsNullOrEmpty(args.Template))
             {
-                var templateId = TemplateResolver.Resolve(db, args.Template).ID;
+                resolvedTemplate = TemplateResolver.Resolve(db, args.Template);
+                var templateId = resolvedTemplate.ID;
                 query = query.Where(i => i.TemplateId == templateId);
             }
 
