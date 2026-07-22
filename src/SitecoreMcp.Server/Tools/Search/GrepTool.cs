@@ -73,9 +73,10 @@ namespace SitecoreMcp.Server.Tools.Search
 
         /// <inheritdoc />
         public override string Description =>
-            "Find a literal string or regex in the raw field values of items under a path. Use this for " +
-            "exact or pattern matches the search index cannot do, such as locating every item that " +
-            "references a specific ID, URL, or string. Requires a root path and is scan-capped.";
+            "Find a literal string or regex in the raw value of ANY field of items under a path — " +
+            "including standard and security fields the search index does not cover. Use this for " +
+            "'items where a field contains X', exact/substring/regex matches, or locating every item " +
+            "that references a specific ID, URL, or string. Requires a root path and is scan-capped.";
 
         /// <inheritdoc />
         protected override McpToolResult Execute(GrepArgs args, McpCallContext context)
@@ -103,7 +104,9 @@ namespace SitecoreMcp.Server.Tools.Search
                 : null;
 
             var candidateIds = ScopedItemIds(index, root.ID, maxScan, out var totalUnderRoot);
-            var scanTruncated = totalUnderRoot > candidateIds.Count;
+            // totalUnderRoot counts documents (item x language x version); we truncated only if that
+            // exceeded the scan cap, not merely because languages inflate the doc count.
+            var scanTruncated = totalUnderRoot > maxScan;
 
             var matches = new List<JObject>();
             var scanned = 0;

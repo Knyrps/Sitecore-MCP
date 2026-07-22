@@ -6,3 +6,6 @@ obj/
 *.suo
 artifacts/
 TestResults/
+
+# CodeGraph local index
+.codegraph/

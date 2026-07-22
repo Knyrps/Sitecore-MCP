@@ -14,8 +14,8 @@ namespace SitecoreMcp.Server.Tools.Search
     /// <summary>Arguments for <see cref="SearchTool"/>.</summary>
     public sealed class SearchArgs
     {
-        /// <summary>Free text matched against item content.</summary>
-        [McpParam(Description = "Free text to match against item content.")]
+        /// <summary>Free text matched against the indexed content.</summary>
+        [McpParam(Description = "Free text matched against indexed content (tokenized; excludes standard/security fields and substrings). To scan raw field values, use sitecore_grep.")]
         public string Text { get; set; }
 
         /// <summary>Find items whose item name equals this exactly.</summary>
@@ -146,6 +146,7 @@ namespace SitecoreMcp.Server.Tools.Search
                         ["countOnly"] = true
                     };
                     if (templateInfo != null) countResult["resolvedTemplate"] = templateInfo;
+                    AddEmptyTextHint(countResult, args, total);
                     return McpToolResult.Structured(countResult);
                 }
 
@@ -197,7 +198,21 @@ namespace SitecoreMcp.Server.Tools.Search
                     ["hits"] = hits
                 };
                 if (templateInfo != null) searchResult["resolvedTemplate"] = templateInfo;
+                AddEmptyTextHint(searchResult, args, results.TotalSearchResults);
                 return McpToolResult.Structured(searchResult);
+            }
+        }
+
+        // Free-text search only sees indexed content, so an empty result for a text query often
+        // means the caller wanted a raw field-value match, which sitecore_grep does.
+        private static void AddEmptyTextHint(JObject result, SearchArgs args, long total)
+        {
+            if (total == 0 && !string.IsNullOrEmpty(args.Text))
+            {
+                result["hint"] =
+                    "No indexed-content matches. To find items whose raw field value contains this " +
+                    "text (any field, substring or regex, including standard/security fields), use " +
+                    "sitecore_grep with a rootPath.";
             }
         }
 
