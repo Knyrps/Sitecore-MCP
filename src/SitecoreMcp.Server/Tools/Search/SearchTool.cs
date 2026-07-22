@@ -1,10 +1,11 @@
 using System;
+using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using Newtonsoft.Json.Linq;
 using Sitecore.ContentSearch;
 using Sitecore.ContentSearch.Linq;
 using Sitecore.ContentSearch.SearchTypes;
-using Sitecore.Data;
 using SitecoreMcp.Server.Protocol;
 using SitecoreMcp.Server.Schema;
 
@@ -29,6 +30,38 @@ namespace SitecoreMcp.Server.Tools.Search
         [McpParam(Description = "Restrict to a language code (e.g. 'en').")]
         public string Language { get; set; }
 
+        /// <summary>Equality filters on raw indexed fields, ANDed together.</summary>
+        [McpParam(Description = "Filter by indexed field equality as field->value (raw indexed field names).")]
+        public Dictionary<string, string> FieldEquals { get; set; }
+
+        /// <summary>Only items updated on or after this ISO date.</summary>
+        [McpParam(Description = "Only items updated on/after this ISO date (e.g. 2026-07-01).")]
+        public string UpdatedAfter { get; set; }
+
+        /// <summary>Only items updated on or before this ISO date.</summary>
+        [McpParam(Description = "Only items updated on/before this ISO date.")]
+        public string UpdatedBefore { get; set; }
+
+        /// <summary>Only items created on or after this ISO date.</summary>
+        [McpParam(Description = "Only items created on/after this ISO date.")]
+        public string CreatedAfter { get; set; }
+
+        /// <summary>Only items created on or before this ISO date.</summary>
+        [McpParam(Description = "Only items created on/before this ISO date.")]
+        public string CreatedBefore { get; set; }
+
+        /// <summary>Field to sort by: updated, created, name, template, or a raw indexed field.</summary>
+        [McpParam(Description = "Sort by: 'updated', 'created', 'name', 'template', or a raw indexed field.")]
+        public string SortBy { get; set; }
+
+        /// <summary>Whether to sort descending; default is ascending.</summary>
+        [McpParam(Description = "Sort descending. Default false (ascending).")]
+        public bool? SortDesc { get; set; }
+
+        /// <summary>Return only the total match count, without hits.</summary>
+        [McpParam(Description = "Return only the total match count, no hits.")]
+        public bool? CountOnly { get; set; }
+
         /// <summary>Which database's index to query; defaults to master.</summary>
         [McpParam(Description = "Database whose index to search: master, web, or core. Defaults to master.")]
         public string Database { get; set; }
@@ -44,7 +77,8 @@ namespace SitecoreMcp.Server.Tools.Search
 
     /// <summary>
     /// Queries a ContentSearch index with bounded, paged results. Combines optional filters (text,
-    /// template, subtree, language) so a model can find items without walking the tree.
+    /// template, subtree, language, field equality, date ranges), sorting, and a count-only mode so
+    /// a model can find items, or just count them, without walking the tree.
     /// </summary>
     public sealed class SearchTool : McpTool<SearchArgs>
     {
@@ -56,8 +90,9 @@ namespace SitecoreMcp.Server.Tools.Search
 
         /// <inheritdoc />
         public override string Description =>
-            "Search a Sitecore ContentSearch index by any combination of free text, template, subtree, " +
-            "and language. Results are paged. Prefer this over tree walking to locate items.";
+            "Search a ContentSearch index by any combination of free text, template, subtree, language, " +
+            "indexed-field equality, and created/updated date ranges. Sort by a field, page results, or " +
+            "pass countOnly for just the total. Prefer this over tree walking to locate items.";
 
         /// <inheritdoc />
         protected override McpToolResult Execute(SearchArgs args, McpCallContext context)
@@ -79,41 +114,18 @@ namespace SitecoreMcp.Server.Tools.Search
             using (var searchContext = index.CreateSearchContext())
             {
                 var query = searchContext.GetQueryable<SearchResultItem>();
+                query = ApplyFilters(query, db, args);
+                query = ApplySort(query, args);
 
-                if (!string.IsNullOrEmpty(args.Text))
+                if (args.CountOnly.GetValueOrDefault(false))
                 {
-                    var text = args.Text;
-                    query = query.Where(i => i.Content.Contains(text));
-                }
-
-                if (!string.IsNullOrEmpty(args.Template))
-                {
-                    var templateItem = db.GetItem(args.Template);
-                    if (templateItem == null)
+                    var total = query.Take(1).GetResults().TotalSearchResults;
+                    return McpToolResult.Structured(new JObject
                     {
-                        throw new McpToolException($"Template '{args.Template}' was not found.");
-                    }
-
-                    var templateId = templateItem.ID;
-                    query = query.Where(i => i.TemplateId == templateId);
-                }
-
-                if (!string.IsNullOrEmpty(args.RootPath))
-                {
-                    var root = db.GetItem(args.RootPath);
-                    if (root == null)
-                    {
-                        throw new McpToolException($"Root '{args.RootPath}' was not found.");
-                    }
-
-                    var rootId = root.ID;
-                    query = query.Where(i => i.Paths.Contains(rootId));
-                }
-
-                if (!string.IsNullOrEmpty(args.Language))
-                {
-                    var language = args.Language;
-                    query = query.Where(i => i.Language == language);
+                        ["index"] = indexName,
+                        ["total"] = total,
+                        ["countOnly"] = true
+                    });
                 }
 
                 var results = query.Skip(offset).Take(limit).GetResults();
@@ -143,6 +155,118 @@ namespace SitecoreMcp.Server.Tools.Search
                     ["hits"] = hits
                 });
             }
+        }
+
+        private static IQueryable<SearchResultItem> ApplyFilters(
+            IQueryable<SearchResultItem> query, Sitecore.Data.Database db, SearchArgs args)
+        {
+            if (!string.IsNullOrEmpty(args.Text))
+            {
+                var text = args.Text;
+                query = query.Where(i => i.Content.Contains(text));
+            }
+
+            if (!string.IsNullOrEmpty(args.Template))
+            {
+                var templateItem = db.GetItem(args.Template);
+                if (templateItem == null)
+                {
+                    throw new McpToolException($"Template '{args.Template}' was not found.");
+                }
+
+                var templateId = templateItem.ID;
+                query = query.Where(i => i.TemplateId == templateId);
+            }
+
+            if (!string.IsNullOrEmpty(args.RootPath))
+            {
+                var root = db.GetItem(args.RootPath);
+                if (root == null)
+                {
+                    throw new McpToolException($"Root '{args.RootPath}' was not found.");
+                }
+
+                var rootId = root.ID;
+                query = query.Where(i => i.Paths.Contains(rootId));
+            }
+
+            if (!string.IsNullOrEmpty(args.Language))
+            {
+                var language = args.Language;
+                query = query.Where(i => i.Language == language);
+            }
+
+            if (args.FieldEquals != null)
+            {
+                foreach (var pair in args.FieldEquals)
+                {
+                    var field = pair.Key;
+                    var value = pair.Value;
+                    query = query.Where(i => i[field] == value);
+                }
+            }
+
+            if (!string.IsNullOrEmpty(args.UpdatedAfter))
+            {
+                var d = ParseDate(args.UpdatedAfter, nameof(args.UpdatedAfter));
+                query = query.Where(i => i.Updated >= d);
+            }
+
+            if (!string.IsNullOrEmpty(args.UpdatedBefore))
+            {
+                var d = ParseDate(args.UpdatedBefore, nameof(args.UpdatedBefore));
+                query = query.Where(i => i.Updated <= d);
+            }
+
+            if (!string.IsNullOrEmpty(args.CreatedAfter))
+            {
+                var d = ParseDate(args.CreatedAfter, nameof(args.CreatedAfter));
+                query = query.Where(i => i.CreatedDate >= d);
+            }
+
+            if (!string.IsNullOrEmpty(args.CreatedBefore))
+            {
+                var d = ParseDate(args.CreatedBefore, nameof(args.CreatedBefore));
+                query = query.Where(i => i.CreatedDate <= d);
+            }
+
+            return query;
+        }
+
+        private static IQueryable<SearchResultItem> ApplySort(IQueryable<SearchResultItem> query, SearchArgs args)
+        {
+            if (string.IsNullOrEmpty(args.SortBy))
+            {
+                return query;
+            }
+
+            var desc = args.SortDesc.GetValueOrDefault(false);
+            switch (args.SortBy.ToLowerInvariant())
+            {
+                case "updated":
+                    return desc ? query.OrderByDescending(i => i.Updated) : query.OrderBy(i => i.Updated);
+                case "created":
+                    return desc ? query.OrderByDescending(i => i.CreatedDate) : query.OrderBy(i => i.CreatedDate);
+                case "name":
+                    return desc ? query.OrderByDescending(i => i.Name) : query.OrderBy(i => i.Name);
+                case "template":
+                case "templatename":
+                    return desc ? query.OrderByDescending(i => i.TemplateName) : query.OrderBy(i => i.TemplateName);
+                default:
+                    var field = args.SortBy;
+                    return desc ? query.OrderByDescending(i => i[field]) : query.OrderBy(i => i[field]);
+            }
+        }
+
+        private static DateTime ParseDate(string value, string argName)
+        {
+            if (!DateTime.TryParse(value, CultureInfo.InvariantCulture,
+                    DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out var result))
+            {
+                throw new McpToolException($"'{argName}' is not a valid date: '{value}'. Use an ISO date like 2026-07-01.");
+            }
+
+            return result;
         }
     }
 }

@@ -121,14 +121,38 @@ namespace SitecoreMcp.Server.Tools.Search
                     }
                 }
 
-                return McpToolResult.Structured(new JObject
+                var result = new JObject
                 {
                     ["index"] = indexName,
                     ["field"] = args.Field,
                     ["totalMatched"] = results.TotalSearchResults,
                     ["distinctValues"] = category?.Values.Count ?? 0,
                     ["values"] = values
-                });
+                };
+
+                // A raw field name that yields nothing is usually a wrong indexed-field name rather
+                // than a genuinely empty facet, so nudge the caller instead of returning a silent void.
+                if (values.Count == 0 && !IsFriendlyField(args.Field) && results.TotalSearchResults > 0)
+                {
+                    result["hint"] =
+                        $"No facet values for '{args.Field}'. It may not be an indexed field name. " +
+                        "Try 'template' or 'language', or use the exact Solr field name.";
+                }
+
+                return McpToolResult.Structured(result);
+            }
+        }
+
+        private static bool IsFriendlyField(string field)
+        {
+            switch (field.ToLowerInvariant())
+            {
+                case "template":
+                case "templatename":
+                case "language":
+                    return true;
+                default:
+                    return false;
             }
         }
 
