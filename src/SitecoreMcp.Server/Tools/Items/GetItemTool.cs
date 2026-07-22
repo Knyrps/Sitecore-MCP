@@ -1,3 +1,4 @@
+using Newtonsoft.Json.Linq;
 using SitecoreMcp.Server.Protocol;
 using SitecoreMcp.Server.Schema;
 
@@ -36,12 +37,29 @@ namespace SitecoreMcp.Server.Tools.Items
         /// <inheritdoc />
         protected override McpToolResult Execute(GetItemArgs args, McpCallContext context)
         {
+            var includeStandard = args.IncludeStandardFields.GetValueOrDefault(false);
+            var includeEmpty = args.IncludeEmpty.GetValueOrDefault(false);
+            var explicitFields = args.Fields != null && args.Fields.Length > 0;
+
             var item = ItemResolver.Resolve(context, args.Path, args.Database, args.Language);
             var projection = new ItemProjector(context).ProjectWithFields(
-                item,
-                args.Fields,
-                args.IncludeStandardFields.GetValueOrDefault(false),
-                args.IncludeEmpty.GetValueOrDefault(false));
+                item, args.Fields, includeStandard, includeEmpty);
+
+            // When the default view returns nothing but fields do exist, tell the model what it is
+            // seeing and how to get more, so an empty result is a signpost rather than a dead end.
+            if (!explicitFields && !includeStandard && !includeEmpty &&
+                ((JObject)projection["fields"]).Count == 0)
+            {
+                var stats = (JObject)projection["fieldStats"];
+                if ((int)stats["empty"] > 0 || (int)stats["standard"] > 0)
+                {
+                    projection["hint"] =
+                        $"No populated content fields on this item (template '{item.TemplateName}'). " +
+                        $"{stats["empty"]} empty content field(s) and {stats["standard"]} standard field(s) exist. " +
+                        "Call sitecore_get_template for the field schema, or re-read with includeEmpty/includeStandardFields.";
+                }
+            }
+
             return McpToolResult.Structured(projection);
         }
     }

@@ -67,38 +67,47 @@ namespace SitecoreMcp.Server.Tools
                 ? new HashSet<string>(requestedFields, System.StringComparer.OrdinalIgnoreCase)
                 : null;
 
+            int populated = 0, empty = 0, standard = 0;
+
             foreach (Field field in item.Fields)
             {
-                if (wanted != null)
-                {
-                    if (!wanted.Contains(field.Name) && !wanted.Contains(field.Key))
-                    {
-                        continue;
-                    }
-                }
-                else
-                {
-                    if (!includeStandardFields && field.Name.StartsWith("__"))
-                    {
-                        continue;
-                    }
-
-                    if (!includeEmpty && string.IsNullOrEmpty(field.Value))
-                    {
-                        continue;
-                    }
-                }
-
                 if (!AuthorizationManager.IsAllowed(field, AccessRight.FieldRead, _context.User))
                 {
-                    // Omit rather than null: a null would read as "empty", a different claim.
+                    // Omit rather than null, and don't count: a denied field's existence isn't disclosed.
                     continue;
                 }
 
-                fields[field.Name] = Truncate(field.Value);
+                var isStandard = field.Name.StartsWith("__");
+                var hasValue = !string.IsNullOrEmpty(field.Value);
+
+                // Census over everything readable, so the caller can orient even when nothing shows.
+                if (isStandard) standard++;
+                else if (hasValue) populated++;
+                else empty++;
+
+                bool include;
+                if (wanted != null)
+                {
+                    include = wanted.Contains(field.Name) || wanted.Contains(field.Key);
+                }
+                else
+                {
+                    include = (includeStandardFields || !isStandard) && (includeEmpty || hasValue);
+                }
+
+                if (include)
+                {
+                    fields[field.Name] = Truncate(field.Value);
+                }
             }
 
             result["fields"] = fields;
+            result["fieldStats"] = new JObject
+            {
+                ["populated"] = populated,
+                ["empty"] = empty,
+                ["standard"] = standard
+            };
             return result;
         }
 

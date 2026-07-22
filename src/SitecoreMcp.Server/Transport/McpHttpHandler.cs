@@ -63,6 +63,8 @@ namespace SitecoreMcp.Server.Transport
         {
             var http = context.Response;
             http.TrySkipIisCustomErrors = true;
+            // Stop ASP.NET Forms Authentication from turning our 401 into a 302 -> /login.aspx.
+            http.SuppressFormsAuthenticationRedirect = true;
             http.StatusCode = response.StatusCode;
             http.ContentType = "application/json";
 
