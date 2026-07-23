@@ -119,16 +119,26 @@ if ([string]::IsNullOrWhiteSpace($AppPool)) {
 }
 Write-Host "App pool: $AppPool" -ForegroundColor Cyan
 
-# Scope the keys to the app pool's environment rather than machine-wide variables. Remove then add,
-# because appcmd cannot reliably update an existing collection entry's value in place.
+# Scope the keys to the app pool's environment rather than machine-wide variables. Update the
+# existing entry in place (or add it), via the WebAdministration cmdlets which reliably write
+# applicationHost.config where appcmd's nested-collection syntax silently no-ops.
+$appHost = "MACHINE/WEBROOT/APPHOST"
 function Set-AppPoolEnv([string] $pool, [string] $name, [string] $value) {
-    & "$env:windir\system32\inetsrv\appcmd.exe" set config -section:system.applicationHost/applicationPools `
-        "/-[name='$pool'].environmentVariables.[name='$name']" 2>$null | Out-Null
-    & "$env:windir\system32\inetsrv\appcmd.exe" set config -section:system.applicationHost/applicationPools `
-        "/+[name='$pool'].environmentVariables.[name='$name',value='$value']" 2>$null | Out-Null
+    $col = "system.applicationHost/applicationPools/add[@name='$pool']/environmentVariables"
+    $existing = Get-WebConfiguration -pspath $appHost -filter "$col/add[@name='$name']" -ErrorAction SilentlyContinue
+    if ($existing) {
+        Set-WebConfigurationProperty -pspath $appHost -filter "$col/add[@name='$name']" -name "value" -value $value
+    }
+    else {
+        Add-WebConfigurationProperty -pspath $appHost -filter $col -name "." -value @{ name = $name; value = $value }
+    }
 }
 Set-AppPoolEnv $AppPool "SITECORE_MCP_KEY" $Key
 Set-AppPoolEnv $AppPool "SITECORE_MCP_KEY_EDITOR" $EditorKey
+
+Write-Host "App pool environment variables now set to:" -ForegroundColor Cyan
+Get-WebConfiguration -pspath $appHost -filter "system.applicationHost/applicationPools/add[@name='$AppPool']/environmentVariables/add" |
+    ForEach-Object { "  $($_.name) = $($_.value)" }
 
 Write-Host "Recycling app pool..." -ForegroundColor Cyan
 Restart-WebAppPool -Name $AppPool

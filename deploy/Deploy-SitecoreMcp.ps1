@@ -76,12 +76,19 @@ if ([string]::IsNullOrWhiteSpace($AppPool)) {
 }
 Write-Host "App pool: $AppPool" -ForegroundColor Cyan
 
-# Scope the key to the app pool's environment rather than a machine-wide variable. Remove then add,
-# because appcmd cannot reliably update an existing collection entry's value in place.
-& "$env:windir\system32\inetsrv\appcmd.exe" set config -section:system.applicationHost/applicationPools `
-    "/-[name='$AppPool'].environmentVariables.[name='SITECORE_MCP_KEY']" 2>$null | Out-Null
-& "$env:windir\system32\inetsrv\appcmd.exe" set config -section:system.applicationHost/applicationPools `
-    "/+[name='$AppPool'].environmentVariables.[name='SITECORE_MCP_KEY',value='$Key']" 2>$null | Out-Null
+# Scope the key to the app pool's environment rather than a machine-wide variable. Update in place
+# (or add) via the WebAdministration cmdlets, which reliably write applicationHost.config where
+# appcmd's nested-collection syntax silently no-ops.
+$appHost = "MACHINE/WEBROOT/APPHOST"
+$envCol = "system.applicationHost/applicationPools/add[@name='$AppPool']/environmentVariables"
+$existing = Get-WebConfiguration -pspath $appHost -filter "$envCol/add[@name='SITECORE_MCP_KEY']" -ErrorAction SilentlyContinue
+if ($existing) {
+    Set-WebConfigurationProperty -pspath $appHost -filter "$envCol/add[@name='SITECORE_MCP_KEY']" -name "value" -value $Key
+}
+else {
+    Add-WebConfigurationProperty -pspath $appHost -filter $envCol -name "." -value @{ name = "SITECORE_MCP_KEY"; value = $Key }
+}
+Write-Host "SITECORE_MCP_KEY on '$AppPool' set to: $((Get-WebConfiguration -pspath $appHost -filter "$envCol/add[@name='SITECORE_MCP_KEY']").value)" -ForegroundColor Cyan
 
 Write-Host "Recycling app pool..." -ForegroundColor Cyan
 Restart-WebAppPool -Name $AppPool
