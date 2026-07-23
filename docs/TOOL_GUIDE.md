@@ -98,6 +98,33 @@ before, unless `AutomaticUnlockOnSaved` already did). A write to an item **locke
 is refused with the owner named, and a save Sitecore rejects (lock/workflow) is reported as an
 error — never a silent success. Move/copy/rename/delete structural ops are not gated by this.
 
+## References — what breaks if I change this?
+
+Sitecore's **Link Database** records every field that points at another item. These tools read it,
+and they are the impact check to run *before* `delete_item`, `move_item`, or `rename_item`.
+
+- **`get_item_references`** — what this item points **at** (its dependencies), with the field each
+  link comes from.
+- **`get_item_referrers`** — what points **at** this item. `total` is the honest impact number.
+- **`update_item_referrers`** — repoint every incoming link at a different item (`newTarget`), or
+  **remove** them when `newTarget` is omitted. It edits *other* items, so check `get_item_referrers`
+  first. Edits are grouped per referring item and reported individually — one item being locked or
+  unwritable does not stop the rest, and failures are listed rather than swallowed.
+
+**Sharp edges:**
+- **Results are only as fresh as the Link Database.** After a bulk import, a serialization sync, or
+  with link tracking disabled, it can be stale — an empty `referrers` result is **not proof** nothing
+  references the item, and the tool says so.
+- **`resolved: false` on a reference is ambiguous by nature** — the target is either deleted or
+  outside what this client can read, and those are indistinguishable from here. In practice a real
+  site carries plenty of genuinely dangling links (deleted datasources still wired into
+  `__Final Renderings`), so this is a useful way to find them.
+- **Unreadable referrers are counted, not listed.** They still reference the item, so hiding them
+  entirely would produce a false "safe to delete" signal; they appear as `unreadable`.
+- **Only link-shaped fields can be rewritten.** `update_item_referrers` asks Sitecore's field type
+  whether it knows how to relink itself; a field that doesn't is skipped rather than having its raw
+  value guessed at.
+
 ## Publishing & background jobs
 
 **Content written to `master` is not live until it is published.** Every write tool above changes the

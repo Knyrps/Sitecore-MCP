@@ -7,14 +7,14 @@ rationale, and the deferred/skipped tools.
 
 ## 1. `Tools/Publishing` (new)
 
-- [ ] `sitecore_publish_item` — publish an item (mode: single/smart/incremental, target databases,
+- [x] `sitecore_publish_item` — publish an item (mode: single/smart/incremental, target databases,
       languages, publish-subitems)
 
 ## 2. `Tools/Items` — reference & impact analysis
 
-- [ ] `sitecore_get_item_references` — outgoing links (what this item references)
-- [ ] `sitecore_get_item_referrers` — incoming links (what references this item)
-- [ ] `sitecore_update_item_referrers` — retarget or clear links to an item
+- [x] `sitecore_get_item_references` — outgoing links (what this item references)
+- [x] `sitecore_get_item_referrers` — incoming links (what references this item)
+- [x] `sitecore_update_item_referrers` — retarget or clear links to an item
 
 ## 3. `Tools/Presentation` (new)
 
