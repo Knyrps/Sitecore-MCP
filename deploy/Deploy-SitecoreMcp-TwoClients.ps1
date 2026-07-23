@@ -119,13 +119,13 @@ if ([string]::IsNullOrWhiteSpace($AppPool)) {
 }
 Write-Host "App pool: $AppPool" -ForegroundColor Cyan
 
-# Scope the keys to the app pool's environment rather than machine-wide variables.
+# Scope the keys to the app pool's environment rather than machine-wide variables. Remove then add,
+# because appcmd cannot reliably update an existing collection entry's value in place.
 function Set-AppPoolEnv([string] $pool, [string] $name, [string] $value) {
     & "$env:windir\system32\inetsrv\appcmd.exe" set config -section:system.applicationHost/applicationPools `
-        "/+[name='$pool'].environmentVariables.[name='$name',value='$value']" 2>$null | Out-Null
-    # Re-run as a set in case it already existed.
+        "/-[name='$pool'].environmentVariables.[name='$name']" 2>$null | Out-Null
     & "$env:windir\system32\inetsrv\appcmd.exe" set config -section:system.applicationHost/applicationPools `
-        "/[name='$pool'].environmentVariables.[name='$name'].value:$value" 2>$null | Out-Null
+        "/+[name='$pool'].environmentVariables.[name='$name',value='$value']" 2>$null | Out-Null
 }
 Set-AppPoolEnv $AppPool "SITECORE_MCP_KEY" $Key
 Set-AppPoolEnv $AppPool "SITECORE_MCP_KEY_EDITOR" $EditorKey
