@@ -29,9 +29,12 @@ app-pool environment, and app-pool recycling are all admin-only.
    The script **builds** the project first (so it never ships a stale or wrong-configuration
    artifact), then copies the DLL and `SitecoreMcp.config`, writes a `SitecoreMcp.Dev.config` that
    enables the endpoint over HTTP with an admin-mapped client, sets `SITECORE_MCP_KEY` on the app
-   pool, and recycles it. It prints the generated key. It defaults to `Release`; pass
-   `-Configuration Debug` only if you deliberately want a Debug build — the same configuration is
-   built and deployed, so they can never drift.
+   pool, and recycles it. It prints the generated key. It defaults to `Release`; the same
+   configuration is built and deployed, so they can never drift.
+
+   To debug the running endpoint, deploy `-Configuration Debug`: it builds a non-optimized assembly
+   with full symbols and copies the matching `.pdb`, so you can attach a debugger to the instance's
+   `w3wp` process and hit breakpoints. Switch back to `Release` when done.
 
 3. Verify:
 
