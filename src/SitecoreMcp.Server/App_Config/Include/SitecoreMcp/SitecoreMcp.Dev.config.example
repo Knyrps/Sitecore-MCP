@@ -35,7 +35,8 @@
 
     <sitecoreMcp>
       <clients>
-        <client keyEnvVar="SITECORE_MCP_KEY" user="sitecore\admin" allowWrites="true" databases="master|web|core" />
+        <client id="admin" keyEnvVar="SITECORE_MCP_KEY" user="sitecore\admin" allowWrites="true"
+          databases="master|web|core" />
       </clients>
     </sitecoreMcp>
 

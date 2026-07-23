@@ -94,8 +94,8 @@ $devConfig = @"
     </settings>
     <sitecoreMcp>
       <clients>
-        <client keyEnvVar="SITECORE_MCP_KEY" user="sitecore\admin" allowWrites="true" databases="master|web|core" />
-        <client keyEnvVar="SITECORE_MCP_KEY_EDITOR" user="$EditorUser" allowWrites="true" databases="master" />
+        <client id="admin" keyEnvVar="SITECORE_MCP_KEY" user="sitecore\admin" allowWrites="true" databases="master|web|core" />
+        <client id="editor" keyEnvVar="SITECORE_MCP_KEY_EDITOR" user="$EditorUser" allowWrites="true" databases="master" />
       </clients>
     </sitecoreMcp>
   </sitecore>
@@ -139,12 +139,6 @@ Set-AppPoolEnv $AppPool "SITECORE_MCP_KEY_EDITOR" $EditorKey
 Write-Host "App pool environment variables now set to:" -ForegroundColor Cyan
 Get-WebConfiguration -pspath $appHost -filter "system.applicationHost/applicationPools/add[@name='$AppPool']/environmentVariables/add" |
     ForEach-Object { "  $($_.name) = $($_.value)" }
-
-Write-Host "Restarting app pool (full stop then start, so the worker re-reads its environment)..." -ForegroundColor Cyan
-try { if ((Get-WebAppPoolState -Name $AppPool).Value -ne "Stopped") { Stop-WebAppPool -Name $AppPool } } catch { }
-$tries = 0
-while ((Get-WebAppPoolState -Name $AppPool).Value -ne "Stopped" -and $tries -lt 40) { Start-Sleep -Milliseconds 250; $tries++ }
-Start-WebAppPool -Name $AppPool
 
 Write-Host ""
 Write-Host "Deployed two clients. Create the non-admin user '$EditorUser' if you have not already." -ForegroundColor Green
