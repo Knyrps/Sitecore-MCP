@@ -1,7 +1,7 @@
 using Sitecore.Data;
 using Sitecore.Data.Items;
 
-namespace SitecoreMcp.Server.Tools
+namespace SitecoreMcp.Server.Tools.Items
 {
     /// <summary>Resolves items from a path or ID against a call's permitted database and language.</summary>
     public static class ItemResolver

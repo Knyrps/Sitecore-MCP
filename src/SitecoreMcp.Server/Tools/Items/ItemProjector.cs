@@ -6,7 +6,7 @@ using Sitecore.Data.Items;
 using Sitecore.Security.AccessControl;
 using SitecoreMcp.Server.Transport;
 
-namespace SitecoreMcp.Server.Tools
+namespace SitecoreMcp.Server.Tools.Items
 {
     /// <summary>
     /// Turns a Sitecore item into the JSON the model sees. Applies field-level security, returns

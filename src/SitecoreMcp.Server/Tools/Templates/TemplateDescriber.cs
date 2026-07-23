@@ -3,7 +3,7 @@ using Newtonsoft.Json.Linq;
 using Sitecore;
 using Sitecore.Data.Items;
 
-namespace SitecoreMcp.Server.Tools
+namespace SitecoreMcp.Server.Tools.Templates
 {
     /// <summary>
     /// Projects a template to JSON for tool results. Two views: <see cref="Describe"/> reads the

@@ -5,7 +5,7 @@ using Sitecore.Data.Fields;
 using Sitecore.Data.Items;
 using Sitecore.Security.AccessControl;
 
-namespace SitecoreMcp.Server.Tools
+namespace SitecoreMcp.Server.Tools.Items
 {
     /// <summary>The outcome of a field write: which fields were saved, and which did not actually persist.</summary>
     public sealed class FieldWriteResult

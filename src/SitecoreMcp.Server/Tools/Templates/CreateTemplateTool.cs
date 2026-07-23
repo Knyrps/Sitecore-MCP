@@ -4,8 +4,9 @@ using Sitecore.Data;
 using Sitecore.Data.Items;
 using SitecoreMcp.Server.Protocol;
 using SitecoreMcp.Server.Schema;
+using SitecoreMcp.Server.Tools.Items;
 
-namespace SitecoreMcp.Server.Tools.Items
+namespace SitecoreMcp.Server.Tools.Templates
 {
     /// <summary>Arguments for <see cref="CreateTemplateTool"/>.</summary>
     public sealed class CreateTemplateArgs

@@ -5,8 +5,9 @@ using Sitecore;
 using Sitecore.Configuration;
 using Sitecore.Data;
 using Sitecore.Data.Items;
+using SitecoreMcp.Server.Tools.Items;
 
-namespace SitecoreMcp.Server.Tools
+namespace SitecoreMcp.Server.Tools.Templates
 {
     /// <summary>
     /// Builds template structure: validates a section/field definition, applies base templates,

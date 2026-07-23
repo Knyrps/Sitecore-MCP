@@ -1,6 +1,6 @@
 using SitecoreMcp.Server.Schema;
 
-namespace SitecoreMcp.Server.Tools
+namespace SitecoreMcp.Server.Tools.Templates
 {
     /// <summary>
     /// One field within a template section: its name, Sitecore field type, and the flags and source

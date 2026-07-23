@@ -1,7 +1,8 @@
 using Sitecore.Data.Items;
 using SitecoreMcp.Server.Protocol;
+using SitecoreMcp.Server.Tools.Items;
 
-namespace SitecoreMcp.Server.Tools.Items
+namespace SitecoreMcp.Server.Tools.Templates
 {
     /// <summary>Arguments for <see cref="GetTemplateTool"/>.</summary>
     public sealed class GetTemplateArgs : ItemQueryArgs

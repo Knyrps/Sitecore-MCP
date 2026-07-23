@@ -13,7 +13,10 @@ To build, deploy, and connect a client, see the **Local build & setup** section 
 |---|---|
 | `Protocol/` | JSON-RPC 2.0 and MCP envelope. **No Sitecore references** — this is what keeps the unit tests runnable without an instance. |
 | `Transport/` | Route registration, `IHttpHandler`, request guards, authentication, audit logging. |
-| `Tools/` | `IMcpTool` implementations. Thin wrappers over the Kernel API. |
+| `Tools/` | Tool framework: `IMcpTool`, the `McpTool<TArgs>` base, the registry and per-call catalog, the call context, and shared paging. |
+| `Tools/Items/` | Item tools (get/create/update/move/copy/rename/delete) and their helpers (resolve, edit, project). |
+| `Tools/Templates/` | Template tools (get/list/create) and their helpers (resolve, build, describe). |
+| `Tools/Search/` | Index-backed tools: search, grep, facet, index status. |
 | `Schema/` | Reflection-based POCO-to-JSON-Schema generator, driven by `[McpParam]`. |
 | `App_Config/Include/` | Sitecore config patches. |
 

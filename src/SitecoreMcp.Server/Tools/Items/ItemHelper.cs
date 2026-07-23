@@ -1,6 +1,6 @@
 ﻿using Sitecore.Data.Items;
 
-namespace SitecoreMcp.Server.Tools
+namespace SitecoreMcp.Server.Tools.Items
 {
     public static class ItemHelper
     {

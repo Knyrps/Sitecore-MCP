@@ -7,7 +7,7 @@ using Sitecore.Data.Templates;
 using SitecoreMcp.Server.Protocol;
 using SitecoreMcp.Server.Schema;
 
-namespace SitecoreMcp.Server.Tools.Items
+namespace SitecoreMcp.Server.Tools.Templates
 {
     /// <summary>Arguments for <see cref="ListTemplatesTool"/>.</summary>
     public sealed class ListTemplatesArgs

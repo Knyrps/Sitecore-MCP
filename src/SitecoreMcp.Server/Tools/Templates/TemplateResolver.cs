@@ -4,7 +4,7 @@ using Sitecore.Data;
 using Sitecore.Data.Items;
 using Sitecore.Data.Managers;
 
-namespace SitecoreMcp.Server.Tools
+namespace SitecoreMcp.Server.Tools.Templates
 {
     /// <summary>Resolves a template reference that may be a path, an ID, or a plain template name.</summary>
     public static class TemplateResolver

@@ -8,6 +8,7 @@ using Sitecore.ContentSearch.Linq;
 using Sitecore.ContentSearch.SearchTypes;
 using SitecoreMcp.Server.Protocol;
 using SitecoreMcp.Server.Schema;
+using SitecoreMcp.Server.Tools.Templates;
 
 namespace SitecoreMcp.Server.Tools.Search
 {
