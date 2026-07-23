@@ -36,10 +36,18 @@ namespace SitecoreMcp.Server.Tools.Items
             }
 
             var item = ItemResolver.Resolve(context, args.Path, args.Database, args.Language);
-            var written = ItemEditor.WriteFields(item, args.Fields, context);
+            var write = ItemEditor.WriteFields(item, args.Fields, context);
 
             var result = new ItemProjector(context).ProjectSummary(item);
-            result["updatedFields"] = new JArray(written);
+            result["updatedFields"] = new JArray(write.Written);
+            if (write.NotPersisted.Count > 0)
+            {
+                result["notPersisted"] = new JArray(write.NotPersisted);
+                result["warning"] =
+                    "These fields reported saved but read back with their previous value, so the change " +
+                    "did not persist (likely field security, a computed field, or a save handler): " +
+                    string.Join(", ", write.NotPersisted) + ".";
+            }
             return McpToolResult.Structured(result);
         }
     }

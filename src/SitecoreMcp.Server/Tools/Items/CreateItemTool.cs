@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Newtonsoft.Json.Linq;
 using Sitecore.Data;
 using Sitecore.Data.Items;
 using SitecoreMcp.Server.Protocol;
@@ -65,12 +66,18 @@ namespace SitecoreMcp.Server.Tools.Items
 
             var templateItem = TemplateResolver.Resolve(parent.Database, args.Template);
             var created = parent.Add(args.Name, new TemplateID(templateItem.ID));
+            FieldWriteResult write = null;
             if (args.Fields != null && args.Fields.Count > 0)
             {
-                ItemEditor.WriteFields(created, args.Fields, context);
+                write = ItemEditor.WriteFields(created, args.Fields, context);
             }
 
-            return McpToolResult.Structured(new ItemProjector(context).ProjectWithFields(created, null));
+            var projection = new ItemProjector(context).ProjectWithFields(created, null);
+            if (write != null && write.NotPersisted.Count > 0)
+            {
+                projection["notPersisted"] = new JArray(write.NotPersisted);
+            }
+            return McpToolResult.Structured(projection);
         }
     }
 }

@@ -7,12 +7,46 @@ using Sitecore.Security.AccessControl;
 
 namespace SitecoreMcp.Server.Tools
 {
+    /// <summary>The outcome of a field write: which fields were saved, and which did not actually persist.</summary>
+    public sealed class FieldWriteResult
+    {
+        /// <summary>A result with nothing written and nothing dropped.</summary>
+        public static readonly FieldWriteResult Empty = new FieldWriteResult(new string[0], new string[0]);
+
+        /// <summary>Creates a result from the written and non-persisted field name lists.</summary>
+        public FieldWriteResult(IReadOnlyList<string> written, IReadOnlyList<string> notPersisted)
+        {
+            Written = written;
+            NotPersisted = notPersisted;
+        }
+
+        /// <summary>The fields whose values were changed and saved.</summary>
+        public IReadOnlyList<string> Written { get; }
+
+        /// <summary>The fields that were written but read back with their previous value (the save was dropped).</summary>
+        public IReadOnlyList<string> NotPersisted { get; }
+    }
+
     /// <summary>
     /// Applies field edits inside the required BeginEdit/EndEdit/CancelEdit shape, handling item
     /// locking for non-admin callers and surfacing a rejected save instead of silently dropping it.
     /// </summary>
     public static class ItemEditor
     {
+        private struct FieldChange
+        {
+            public FieldChange(string name, string newValue, string oldValue)
+            {
+                Name = name;
+                NewValue = newValue;
+                OldValue = oldValue;
+            }
+
+            public string Name { get; }
+            public string NewValue { get; }
+            public string OldValue { get; }
+        }
+
         /// <summary>
         /// Runs <paramref name="mutate"/> inside an edit. Acquires a lock first when the instance
         /// requires one and the caller is not an admin, restores the prior lock state afterward, and
@@ -63,14 +97,15 @@ namespace SitecoreMcp.Server.Tools
 
         /// <summary>
         /// Writes a field-name/value map to an item, checking field-write permission and field
-        /// existence first. Returns the names actually written. Throws <see cref="McpToolException"/>
-        /// for an unknown field or one the user may not write, before any change is made.
+        /// existence first, then verifying the values actually persisted. Throws
+        /// <see cref="McpToolException"/> for an unknown field or one the user may not write, before
+        /// any change is made.
         /// </summary>
-        public static IReadOnlyList<string> WriteFields(Item item, IReadOnlyDictionary<string, string> fields, McpCallContext context)
+        public static FieldWriteResult WriteFields(Item item, IReadOnlyDictionary<string, string> fields, McpCallContext context)
         {
             if (fields == null || fields.Count == 0)
             {
-                return new string[0];
+                return FieldWriteResult.Empty;
             }
 
             item.Fields.ReadAll();
@@ -90,35 +125,55 @@ namespace SitecoreMcp.Server.Tools
                 }
             }
 
-            // Only write fields whose value actually differs. Writing a field to its current value is
-            // a no-op that EndEdit reports as "nothing saved" — treat that as a benign no-change, not
-            // a failure, so re-applying the same value never looks like a rejected save.
-            var changes = new List<KeyValuePair<string, string>>();
+            // Only write fields whose value actually differs, keeping the value each held before the
+            // write. Writing a field to its current value is a no-op EndEdit reports as "nothing saved",
+            // which is not a failure.
+            var changes = new List<FieldChange>();
             foreach (var pair in fields)
             {
                 var current = item.Fields[pair.Key].Value ?? string.Empty;
-                if (!string.Equals(current, pair.Value ?? string.Empty, StringComparison.Ordinal))
+                var target = pair.Value ?? string.Empty;
+                if (!string.Equals(current, target, StringComparison.Ordinal))
                 {
-                    changes.Add(pair);
+                    changes.Add(new FieldChange(pair.Key, target, current));
                 }
             }
 
             if (changes.Count == 0)
             {
-                return new string[0];
+                return FieldWriteResult.Empty;
             }
 
             var written = new List<string>();
             Edit(item, editable =>
             {
-                foreach (var pair in changes)
+                foreach (var change in changes)
                 {
-                    editable.Fields[pair.Key].Value = pair.Value ?? string.Empty;
-                    written.Add(pair.Key);
+                    editable.Fields[change.Name].Value = change.NewValue;
+                    written.Add(change.Name);
                 }
             });
 
-            return written;
+            // Verify persistence with a fresh read. A field "did not persist" when its saved value is
+            // still exactly what it was before (the change was silently dropped, e.g. by field security
+            // or a save handler) rather than merely server-normalized (which differs from the old value).
+            var notPersisted = new List<string>();
+            var fresh = item.Database.GetItem(item.ID, item.Language, item.Version);
+            if (fresh != null)
+            {
+                fresh.Fields.ReadAll();
+                foreach (var change in changes)
+                {
+                    var actual = fresh.Fields[change.Name]?.Value ?? string.Empty;
+                    if (string.Equals(actual, change.OldValue, StringComparison.Ordinal) &&
+                        !string.Equals(actual, change.NewValue, StringComparison.Ordinal))
+                    {
+                        notPersisted.Add(change.Name);
+                    }
+                }
+            }
+
+            return new FieldWriteResult(written, notPersisted);
         }
 
         /// <summary>

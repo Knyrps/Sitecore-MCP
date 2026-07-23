@@ -62,7 +62,10 @@ correct `_name` field.
 - **`create_item`** — parent, name, template (name/path/ID), optional initial fields. Validates the
   name and refuses a duplicate sibling.
 - **`update_item`** — changes only the fields you pass; an unknown or unwritable field is rejected
-  **before** anything is saved.
+  **before** anything is saved. Writing a field to its current value is a benign no-op. After saving
+  it verifies each change actually stuck: a field that reports saved but reads back with its old
+  value (dropped by field security, a computed field, or a save handler — e.g. a limited user
+  editing `__Display name`) is listed in `notPersisted` with a warning, not a false success.
 - **`move_item`** — refuses a destination inside the item's own subtree, or a name collision.
 - **`copy_item`** — copies **field data**, not just structure. A deep copy of a site clones *all* its
   content (hostnames, form IDs, settings). If you want "same skeleton, empty fields", copy is the
