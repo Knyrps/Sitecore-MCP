@@ -54,10 +54,7 @@ namespace SitecoreMcp.Server.Tools.Items
         {
             var parent = ItemResolver.Resolve(context, args.Parent, args.Database, args.Language);
 
-            if (!ItemUtil.IsItemNameValid(args.Name))
-            {
-                return McpToolResult.Failure(ItemUtil.GetItemNameError(args.Name));
-            }
+            ItemHelper.ValidateName(args.Name);
 
             if (parent.Children[args.Name] != null)
             {

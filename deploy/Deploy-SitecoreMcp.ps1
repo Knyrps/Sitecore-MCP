@@ -57,6 +57,16 @@ Copy-Item $dll $binTarget -Force
 $pdb = [IO.Path]::ChangeExtension($dll, ".pdb")
 if (Test-Path $pdb) { Copy-Item $pdb $binTarget -Force }
 
+# Verify the copy actually landed. A silently failed or skipped copy (e.g. a locked file, or the
+# script aborting before this point on a re-run) otherwise leaves the old assembly serving requests.
+$deployedDll = Join-Path $binTarget (Split-Path $dll -Leaf)
+$srcHash = (Get-FileHash $dll).Hash
+$dstHash = (Get-FileHash $deployedDll -ErrorAction SilentlyContinue).Hash
+if ($srcHash -ne $dstHash) {
+    throw "Deployed assembly hash does not match the build. source=$srcHash deployed=$dstHash. The copy did not land."
+}
+Write-Host "Assembly verified: $dstHash" -ForegroundColor Green
+
 Write-Host "Copying base config..." -ForegroundColor Cyan
 Copy-Item (Join-Path $serverDir "App_Config\Include\SitecoreMcp\SitecoreMcp.config") $includeTarget -Force
 

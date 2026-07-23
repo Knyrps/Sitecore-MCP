@@ -37,8 +37,7 @@
   </ItemGroup>
 
   <Target Name="VerifySitecoreReferences" BeforeTargets="ResolveAssemblyReferences">
-    <Error Condition="!Exists('$(SitecoreBinPath)\Sitecore.Kernel.dll')"
-           Text="Sitecore.Kernel.dll not found under '$(SitecoreBinPath)'. Set &lt;SitecoreWebRoot&gt; in Directory.Build.user.props." />
+    <Error Condition="!Exists('$(SitecoreBinPath)\Sitecore.Kernel.dll')" Text="Sitecore.Kernel.dll not found under '$(SitecoreBinPath)'. Set &lt;SitecoreWebRoot&gt; in Directory.Build.user.props." />
   </Target>
 
   <!-- Opt-in: /p:DeployToSitecore=true. A plain build must not write into a live web root. -->
@@ -49,8 +48,7 @@
       <_DeployConfigs Include="$(MSBuildProjectDirectory)\App_Config\Include\**\*.config" />
     </ItemGroup>
     <Copy SourceFiles="@(_DeployBinaries)" DestinationFolder="$(SitecoreBinPath)" />
-    <Copy SourceFiles="@(_DeployConfigs)"
-          DestinationFiles="@(_DeployConfigs->'$(SitecoreWebRoot)\App_Config\Include\%(RecursiveDir)%(Filename)%(Extension)')" />
+    <Copy SourceFiles="@(_DeployConfigs)" DestinationFiles="@(_DeployConfigs->'$(SitecoreWebRoot)\App_Config\Include\%(RecursiveDir)%(Filename)%(Extension)')" />
     <Message Importance="high" Text="Deployed SitecoreMcp.Server to $(SitecoreWebRoot)" />
   </Target>
 

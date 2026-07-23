@@ -1,8 +1,5 @@
-using System.Collections.Generic;
-using Newtonsoft.Json.Linq;
 using Sitecore.Data.Items;
 using SitecoreMcp.Server.Protocol;
-using SitecoreMcp.Server.Schema;
 
 namespace SitecoreMcp.Server.Tools.Items
 {
@@ -38,55 +35,7 @@ namespace SitecoreMcp.Server.Tools.Items
                 ? new TemplateItem(item)
                 : item.Template;
 
-            var ownFieldIds = new HashSet<string>();
-            foreach (var own in template.OwnFields)
-            {
-                ownFieldIds.Add(own.ID.ToString());
-            }
-
-            var fields = new JArray();
-            foreach (var field in template.Fields)
-            {
-                // Skip the standard template's own __ fields to keep the list to meaningful content
-                // fields; they are numerous and rarely what the caller is after.
-                if (field.Name.StartsWith("__"))
-                {
-                    continue;
-                }
-
-                fields.Add(new JObject
-                {
-                    ["name"] = field.Name,
-                    ["type"] = field.Type,
-                    ["section"] = field.Section?.Name,
-                    ["shared"] = field.IsShared,
-                    ["unversioned"] = field.IsUnversioned,
-                    ["source"] = string.IsNullOrEmpty(field.Source) ? null : field.Source,
-                    ["inherited"] = !ownFieldIds.Contains(field.ID.ToString())
-                });
-            }
-
-            var baseTemplates = new JArray();
-            foreach (var baseTemplate in template.BaseTemplates)
-            {
-                baseTemplates.Add(new JObject
-                {
-                    ["id"] = baseTemplate.ID.ToString(),
-                    ["name"] = baseTemplate.Name,
-                    ["path"] = baseTemplate.InnerItem.Paths.FullPath
-                });
-            }
-
-            return McpToolResult.Structured(new JObject
-            {
-                ["id"] = template.ID.ToString(),
-                ["name"] = template.Name,
-                ["path"] = template.InnerItem.Paths.FullPath,
-                ["forItem"] = item.Paths.FullPath,
-                ["baseTemplates"] = baseTemplates,
-                ["fieldCount"] = fields.Count,
-                ["fields"] = fields
-            });
+            return McpToolResult.Structured(TemplateDescriber.Describe(template, item));
         }
     }
 }

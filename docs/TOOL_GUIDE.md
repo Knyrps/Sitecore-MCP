@@ -61,6 +61,18 @@ correct `_name` field.
 
 - **`create_item`** — parent, name, template (name/path/ID), optional initial fields. Validates the
   name and refuses a duplicate sibling.
+- **`create_template`** — parent, name, optional `baseTemplates` (name/path/ID, default the Standard
+  Template), `sections` (each a name plus typed `fields`), and `createStandardValues`. Field `type`
+  must be an **exact** Sitecore field type (e.g. `Single-Line Text`); an unknown type is rejected
+  with the **closest real types on this instance** named in the error (or the full valid set when
+  nothing is close), so a model can self-correct in one turn. That set is read live from the core
+  field-type registry, so **custom field types are supported** — anything registered under
+  `/sitecore/system/Field types`.
+  The **whole definition is validated before anything is created** — a bad name, unknown type, or a
+  duplicate **section or field name** fails with nothing written; a field name must be unique across
+  the *entire* template (not just its section), since `Fields[name]` resolves template-wide. A build
+  that fails partway recycles the half-made template. The result echoes the created sections and
+  fields read back from the item tree, so it reflects what actually persisted.
 - **`update_item`** — changes only the fields you pass; an unknown or unwritable field is rejected
   **before** anything is saved. Writing a field to its current value is a benign no-op. After saving
   it verifies each change actually stuck: a field that reports saved but reads back with its old
