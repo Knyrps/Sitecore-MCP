@@ -90,10 +90,28 @@ namespace SitecoreMcp.Server.Tools
                 }
             }
 
+            // Only write fields whose value actually differs. Writing a field to its current value is
+            // a no-op that EndEdit reports as "nothing saved" — treat that as a benign no-change, not
+            // a failure, so re-applying the same value never looks like a rejected save.
+            var changes = new List<KeyValuePair<string, string>>();
+            foreach (var pair in fields)
+            {
+                var current = item.Fields[pair.Key].Value ?? string.Empty;
+                if (!string.Equals(current, pair.Value ?? string.Empty, StringComparison.Ordinal))
+                {
+                    changes.Add(pair);
+                }
+            }
+
+            if (changes.Count == 0)
+            {
+                return new string[0];
+            }
+
             var written = new List<string>();
             Edit(item, editable =>
             {
-                foreach (var pair in fields)
+                foreach (var pair in changes)
                 {
                     editable.Fields[pair.Key].Value = pair.Value ?? string.Empty;
                     written.Add(pair.Key);
