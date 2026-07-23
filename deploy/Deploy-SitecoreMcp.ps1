@@ -90,8 +90,11 @@ else {
 }
 Write-Host "SITECORE_MCP_KEY on '$AppPool' set to: $((Get-WebConfiguration -pspath $appHost -filter "$envCol/add[@name='SITECORE_MCP_KEY']").value)" -ForegroundColor Cyan
 
-Write-Host "Recycling app pool..." -ForegroundColor Cyan
-Restart-WebAppPool -Name $AppPool
+Write-Host "Restarting app pool (full stop then start, so the worker re-reads its environment)..." -ForegroundColor Cyan
+try { if ((Get-WebAppPoolState -Name $AppPool).Value -ne "Stopped") { Stop-WebAppPool -Name $AppPool } } catch { }
+$tries = 0
+while ((Get-WebAppPoolState -Name $AppPool).Value -ne "Stopped" -and $tries -lt 40) { Start-Sleep -Milliseconds 250; $tries++ }
+Start-WebAppPool -Name $AppPool
 
 Write-Host ""
 Write-Host "Deployed. Verify with:" -ForegroundColor Green

@@ -140,8 +140,11 @@ Write-Host "App pool environment variables now set to:" -ForegroundColor Cyan
 Get-WebConfiguration -pspath $appHost -filter "system.applicationHost/applicationPools/add[@name='$AppPool']/environmentVariables/add" |
     ForEach-Object { "  $($_.name) = $($_.value)" }
 
-Write-Host "Recycling app pool..." -ForegroundColor Cyan
-Restart-WebAppPool -Name $AppPool
+Write-Host "Restarting app pool (full stop then start, so the worker re-reads its environment)..." -ForegroundColor Cyan
+try { if ((Get-WebAppPoolState -Name $AppPool).Value -ne "Stopped") { Stop-WebAppPool -Name $AppPool } } catch { }
+$tries = 0
+while ((Get-WebAppPoolState -Name $AppPool).Value -ne "Stopped" -and $tries -lt 40) { Start-Sleep -Milliseconds 250; $tries++ }
+Start-WebAppPool -Name $AppPool
 
 Write-Host ""
 Write-Host "Deployed two clients. Create the non-admin user '$EditorUser' if you have not already." -ForegroundColor Green
