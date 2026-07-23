@@ -1,5 +1,6 @@
 using Newtonsoft.Json.Linq;
 using Sitecore.Jobs;
+using Sitecore.Publishing;
 using SitecoreMcp.Server.Protocol;
 using SitecoreMcp.Server.Schema;
 
@@ -37,11 +38,27 @@ namespace SitecoreMcp.Server.Tools.Jobs
         /// <inheritdoc />
         protected override McpToolResult Execute(StopJobArgs args, McpCallContext context)
         {
-            var job = GetJobsTool.FindJob(args.Handle);
+            var parsed = Sitecore.Handle.Parse(args.Handle);
+            var job = parsed == null ? null : JobManager.GetJob(parsed);
             if (job == null)
             {
+                // sitecore_publish_item hands back a publish handle, so that is the handle a caller
+                // is most likely to bring here. A publish is tracked separately from the jobs it
+                // spawns and exposes no abort of its own, so say that rather than reporting the
+                // handle as unknown - which would read as "already finished" for a running publish.
+                var publish = parsed == null ? null : PublishManager.GetStatus(parsed);
+                if (publish != null)
+                {
+                    var pending = JobDescriber.DescribePublish(args.Handle, publish);
+                    pending["abortRequested"] = false;
+                    pending["reason"] = "This handle refers to a publish, not a job, and a publish cannot " +
+                                        "be aborted directly. List jobs with sitecore_get_jobs to find the " +
+                                        "underlying \"Publish to '<target>'\" job, then pass that job's handle.";
+                    return McpToolResult.Structured(pending);
+                }
+
                 throw new McpToolException(
-                    $"No job with handle '{args.Handle}'. It may have finished and been released, or the handle may be from a previous application lifetime.");
+                    $"No job or publish with handle '{args.Handle}'. It may have finished and been released, or the handle may be from a previous application lifetime.");
             }
 
             var result = JobDescriber.Describe(job);

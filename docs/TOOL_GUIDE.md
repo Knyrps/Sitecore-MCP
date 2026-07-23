@@ -124,6 +124,11 @@ authoring database only — `sitecore_publish_item` is what pushes an item to th
   `abortRequested`, and you confirm with `get_jobs` that the job actually reached `Aborted`. A
   non-abortable job is reported as such and left running — there is no safe forced stop, and the tool
   will not pretend otherwise.
+- **A publish cannot be aborted at all.** Passing a *publish* handle to `stop_job` reports the
+  publish's real state and points you at `get_jobs` to find the underlying `Publish to '<target>'`
+  job — but on a stock instance those publish jobs report `abortable: false` too, so in practice a
+  running publish has to finish. Prefer scoping the publish (a narrower path, `deep: false`) over
+  starting a large one you may want to stop.
 
 ## Search — the full query surface
 
