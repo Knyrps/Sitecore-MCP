@@ -98,6 +98,28 @@ before, unless `AutomaticUnlockOnSaved` already did). A write to an item **locke
 is refused with the owner named, and a save Sitecore rejects (lock/workflow) is reported as an
 error — never a silent success. Move/copy/rename/delete structural ops are not gated by this.
 
+## Publishing & background jobs
+
+**Content written to `master` is not live until it is published.** Every write tool above changes the
+authoring database only — `sitecore_publish_item` is what pushes an item to the publishing targets
+(typically `web`).
+
+- **`publish_item`** — `mode` (`smart` publishes only what changed, the default; `full`
+  force-republishes), `deep` (descendants), `publishRelatedItems` (datasources and media the item
+  references), plus explicit `targetDatabases` / `languages` when you don't want the configured
+  defaults.
+- **Publishing is asynchronous.** The tool returns a **job handle** as soon as the job starts — a
+  handle means *started*, never *finished*. Poll **`sitecore_get_jobs`** with it to read `state`
+  (`Running` → `Finished`), `processed`/`total`, and any messages or exceptions.
+- **Targets respect the client's `databases` allow-list.** A client scoped to `master` alone cannot
+  publish to `web` — that's deliberate (a limited client shouldn't push content live). Widen the
+  client's `databases` in config if it should be able to.
+- **`stop_job`** — Sitecore's abort is **cooperative**, not a kill. It only works on jobs that
+  declare themselves abortable, and it asks the job to unwind at its next safe point; the result says
+  `abortRequested`, and you confirm with `get_jobs` that the job actually reached `Aborted`. A
+  non-abortable job is reported as such and left running — there is no safe forced stop, and the tool
+  will not pretend otherwise.
+
 ## Search — the full query surface
 
 `sitecore_search` combines any of: `name` / `nameContains`, `text`, `template`, `rootPath`,

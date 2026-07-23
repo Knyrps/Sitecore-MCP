@@ -26,20 +26,32 @@ category, state, processed/total, messages). Shared by `get_jobs` and as the ret
 `publish_item`.
 
 ### `sitecore_publish_item`
-- **Args:** `ItemQueryArgs` + `mode` (`single` | `smart` | `incremental`, default `single`),
-  `targetDatabases` (string[], default all configured publishing targets), `languages` (string[],
-  default the item's language), `deep` (bool, default `true` — publish subitems).
-- **Sitecore APIs:** `Sitecore.Publishing.PublishManager.PublishItem(Item, Database[], Language[],
-  bool deep, bool compareRevisions)` for `single`; `PublishManager.Republish`/`PublishSmart` for the
-  other modes. Resolve target `Database` objects via `Sitecore.Configuration.Factory.GetDatabase`.
-- **Behavior:** resolve the item and target databases/languages, start the publish, return the
-  `Handle` as a job reference (do not block waiting for completion — matches the async-job framing
-  applied to indexing).
-- **Safety / edge cases:** `RequiresWrite => true`. An invalid target database name is a clear
-  `McpToolException`, not a silent skip. Note in the tool description that the caller should poll
-  `sitecore_get_jobs` with the returned handle rather than assume completion.
-- **Returns:** `{ handle, item, targetDatabases, languages, mode }` — no `success` field, since
-  publish is async; success is determined by polling the job.
+**Scope corrected after reflection:** `PublishSmart`/`Republish`/`PublishIncremental` all take a
+**source `Database`**, not an item — they are database-wide operations. Only `PublishItem` is
+item-scoped. Folding them into an item tool would have meant an `item` argument that is silently
+ignored for most modes. So this tool is item-scoped only, and `mode` maps to the item-level
+equivalent (`compareRevisions`). A database-wide `sitecore_publish_database` can be added later if
+wanted; it is deliberately not this tool.
+
+- **Args:** `ItemQueryArgs` + `mode` (`smart` | `full`, default `smart`), `targetDatabases`
+  (string[], default: all configured publishing targets), `languages` (string[], default the item's
+  language), `deep` (bool, default `false` — publish subitems), `publishRelatedItems` (bool, default
+  `false`).
+- **Sitecore APIs:** `PublishManager.PublishItem(Item, Database[], Language[], bool deep,
+  bool compareRevisions, bool publishRelatedItems)`. `mode: "smart"` → `compareRevisions: true`
+  (publish only what changed); `mode: "full"` → `compareRevisions: false` (force-republish the item).
+  Defaults come from `PublishManager.GetPublishingTargets(sourceDb)`, reading each target item's
+  `Target database` field.
+- **Behavior:** resolve item, targets, and languages; start the publish; return the `Handle`
+  immediately plus the job projection if `JobManager.GetJob(handle)` resolves. Never block.
+- **Safety / edge cases:** `RequiresWrite => true`. Target databases are resolved through
+  `context.ResolveDatabase`, so **the client's `databases` allow-list is enforced on publish
+  targets** — a client scoped to `master` cannot push content to `web`. That is intentional and
+  configurable (widen the client's `databases` to permit it). An unresolvable target is a clear
+  `McpToolException`. The description must tell callers to poll `sitecore_get_jobs`, since a
+  returned handle means *started*, not *finished*.
+- **Returns:** `{ handle, item, mode, deep, targetDatabases, languages, job }` — no `success` field;
+  publish is async and success is determined by polling.
 
 ### `sitecore_get_jobs`
 - **Args:** `handle` (string, optional — a specific job) `category` (string, optional filter),
@@ -51,24 +63,32 @@ category, state, processed/total, messages). Shared by `get_jobs` and as the ret
 - **Returns:** `{ jobs: [ { handle, name, category, state, processed, total, messages } ] }`.
 
 ### `sitecore_stop_job`
+**Design corrected after reflecting over Kernel 18.0.0.0** — the original guess
+(`IndexCustodian.Stop(ISearchIndex)`) does not exist; `IndexCustodian` only exposes a *global*
+`StopIndexing()`/`PauseIndexing()`, which is far too blunt. What does exist is better:
+
+- `Sitecore.Abstractions.BaseJobOptions.Abortable { get; }` — jobs declare whether they can be aborted.
+- `Sitecore.Abstractions.BaseJobStatus.State { get; set; }` — settable.
+- `Sitecore.Jobs.JobState` includes `AbortRequested` and `Aborted`.
+
+That is Sitecore's own **cooperative abort** protocol: request the abort, and an abortable job body
+observes the flag and unwinds cleanly at a safe point.
+
 - **Args:** `handle` (string, required).
-- **Sitecore APIs:** for index jobs, `Sitecore.ContentSearch.Maintenance.IndexCustodian.Stop(ISearchIndex)`
-  — a real, graceful, Sitecore-supported stop. For every other job category, **no supported stop
-  API exists.**
-- **Behavior:** look up the job by handle; if its category identifies it as an index job, resolve
-  the target `ISearchIndex` (via the job's name/category, needs confirming empirically against a
-  running index job) and call `IndexCustodian.Stop`. For any other category, do not attempt a stop —
-  return a result that says so.
-- **Safety / edge cases — the actual design decision behind this tool:** Sitecore does not expose a
-  generic `JobManager.Stop(Job)`. The only way to force-kill an arbitrary job is reflecting into its
-  internal thread and calling `Thread.Abort()`. **Explicitly excluded from this design**: `Thread.Abort`
-  can fire mid-write, leaving a corrupted index segment or a partially-written database row, does not
-  guarantee lock release, and is an API .NET itself has deprecated the use of for exactly these
-  reasons. This tool must never claim a stop succeeded unless it used a real Sitecore-supported
-  mechanism. `RequiresWrite => true` (it changes running server state even though it isn't an item
-  write).
-- **Returns:** `{ handle, stopped: bool, method: "index-custodian" | "unsupported", reason? }` —
-  `stopped: false, method: "unsupported"` is a normal, expected result for most job categories, not
+- **Sitecore APIs:** `JobManager.GetJob(Handle.Parse(handle))`, then set
+  `job.Status.State = JobState.AbortRequested` when `job.Options.Abortable` is true.
+- **Behavior:** resolve the job; if already finished, say so; if not abortable, say so; otherwise
+  request the abort and report that it was *requested*.
+- **Safety / edge cases — the design decision behind this tool:** there is no `BaseJob.Abort()` and
+  no `JobManager.Stop()`. The only way to force-kill a non-abortable job would be reflecting into
+  its thread and calling `Thread.Abort()`. **Explicitly excluded**: that can fire mid-write (corrupt
+  index segment, half-written row), does not guarantee lock release, and is an API .NET itself
+  deprecated for exactly these reasons. Cooperative abort is a *request*, not a guaranteed kill — the
+  tool must report it as such and let the caller poll `sitecore_get_jobs` to confirm the job actually
+  reached `Aborted`. Never claim the job stopped. `RequiresWrite => true` (changes running server
+  state, though not an item write).
+- **Returns:** `{ handle, name, abortable, abortRequested: bool, state, note }` —
+  `abortRequested: false` with a reason (already finished / not abortable) is a normal outcome, not
   a failure.
 
 ---

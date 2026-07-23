@@ -25,6 +25,8 @@ Reads: get_item returns populated non-standard fields by default; an empty field
 
 Writes (only if allowed): create/update/move/copy/rename/delete_item, and create_template. update changes only the fields you pass. copy_item copies field DATA, not just structure. delete_item recycles by default; permanent=true destroys irreversibly. create_template takes base templates (default Standard Template), sections, and typed fields; field types must be exact (e.g. Single-Line Text), field names must be unique across the whole template, and the whole definition is validated before anything is created. Field edits handle item locking automatically for non-admins (lock, edit, restore); a write to an item locked by another user is refused, and a rejected save is reported (never a silent no-op). update_item verifies each change actually persisted and lists any silently dropped (by field security, a computed field, or a save handler) in notPersisted.
 
+Publishing: content written to master is NOT live until published. sitecore_publish_item publishes an item (optionally deep, optionally related items) to the configured targets; it starts a background job and returns a handle immediately, so poll sitecore_get_jobs with that handle rather than assuming it finished. Publish targets obey the client's permitted databases, so a master-only client cannot publish to web. sitecore_stop_job asks an abortable job to stop at its next safe point - it is a request, not a forced kill, and a job that is not abortable is reported as such and left running.
+
 Prefer typed filters (name, template, date ranges) over raw fieldEquals, which needs exact indexed field names (e.g. _name, not name) and silently matches nothing when wrong.";
     }
 }
