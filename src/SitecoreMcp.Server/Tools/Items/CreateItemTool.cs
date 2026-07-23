@@ -19,7 +19,7 @@ namespace SitecoreMcp.Server.Tools.Items
         public string Name { get; set; }
 
         /// <summary>The template to base the new item on, by path, ID, or name.</summary>
-        [McpParam(Description = "Template for the new item, by path, ID, or name (exact, or a unique partial name).", Required = true)]
+        [McpParam(Description = "Template for the new item, by path, ID, or exact name (no partial-name matching on writes).", Required = true)]
         public string Template { get; set; }
 
         /// <summary>The database to create in; defaults to master.</summary>
@@ -61,7 +61,7 @@ namespace SitecoreMcp.Server.Tools.Items
                 return McpToolResult.Failure($"'{parent.Paths.FullPath}' already has a child named '{args.Name}'.");
             }
 
-            var templateItem = TemplateResolver.Resolve(parent.Database, args.Template);
+            var templateItem = TemplateResolver.Resolve(parent.Database, args.Template, allowPartial: false);
             var created = parent.Add(args.Name, new TemplateID(templateItem.ID));
             FieldWriteResult write = null;
             if (args.Fields != null && args.Fields.Count > 0)

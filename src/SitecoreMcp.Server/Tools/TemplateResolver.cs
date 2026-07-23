@@ -10,12 +10,19 @@ namespace SitecoreMcp.Server.Tools
     public static class TemplateResolver
     {
         /// <summary>
-        /// Resolves a template from a path, ID, or name. A name is matched against template names in
-        /// the database. Throws <see cref="McpToolException"/> when nothing matches, the match is
-        /// ambiguous, or the reference points at a non-template item, so a model that thinks in names
-        /// does not need a separate lookup first.
+        /// Resolves a template from a path, ID, or name. A name matches template names in the
+        /// database: an exact name is always tried, and a unique partial name resolves only when
+        /// <paramref name="allowPartial"/> is true. Throws <see cref="McpToolException"/> when nothing
+        /// matches, the match is ambiguous, or the reference points at a non-template item.
         /// </summary>
-        public static Item Resolve(Database db, string reference)
+        /// <param name="db">The database whose templates are searched.</param>
+        /// <param name="reference">A template path, ID, or name.</param>
+        /// <param name="allowPartial">
+        /// When true (the default, for discovery tools like search), a unique substring name match
+        /// resolves. When false (for writes that set inheritance), only a path, ID, or exact name is
+        /// accepted, so a template is never chosen by a fuzzy guess; near matches are still surfaced.
+        /// </param>
+        public static Item Resolve(Database db, string reference, bool allowPartial = true)
         {
             if (string.IsNullOrEmpty(reference))
             {
@@ -34,9 +41,8 @@ namespace SitecoreMcp.Server.Tools
                 throw new McpToolException($"'{item.Paths.FullPath}' is not a template.");
             }
 
-            // Otherwise treat the reference as a template name: an exact name match wins; failing
-            // that, a unique partial match resolves (so "Local Datasource" finds "Local Datasource
-            // Folder"), and anything ambiguous is reported with its candidates.
+            // Otherwise treat the reference as a template name: an exact name match wins, and anything
+            // ambiguous is reported with its candidates.
             var templates = TemplateManager.GetTemplates(db).Values.ToList();
 
             var exact = templates
@@ -54,6 +60,24 @@ namespace SitecoreMcp.Server.Tools
             var partial = templates
                 .Where(t => t.Name.IndexOf(reference, StringComparison.OrdinalIgnoreCase) >= 0)
                 .ToList();
+
+            // Without partial matching (write path), never resolve a fuzzy match: it could silently
+            // inherit the wrong template. Fail, but surface near matches so the caller can pick an
+            // exact one, a path, or an ID.
+            if (!allowPartial)
+            {
+                if (partial.Count > 0)
+                {
+                    var candidates = string.Join(", ", partial.Select(t => t.FullName).Take(10));
+                    throw new McpToolException(
+                        $"Template '{reference}' was not found by path, ID, or exact name. Partial-name " +
+                        $"matching is not used here to avoid inheriting the wrong template; use an exact " +
+                        $"name, path, or ID. Similar: {candidates}.");
+                }
+
+                throw new McpToolException($"Template '{reference}' was not found by path, ID, or exact name.");
+            }
+
             if (TryResolveSingle(db, partial, out var partialItem))
             {
                 return partialItem;

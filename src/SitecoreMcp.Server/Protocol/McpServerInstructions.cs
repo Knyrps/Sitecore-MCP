@@ -19,7 +19,7 @@ Finding items - pick the right tool:
 - Counts/distribution: sitecore_facet; a plain total via sitecore_search 'countOnly'.
 Rule of thumb: search = metadata + indexed content (cheap, index-backed); grep = raw field values (exact, scoped); facet = counts.
 
-Templates: sitecore_get_template shows an item's fields (own + inherited) with types - call it before setting fields so you use real names. sitecore_list_templates finds a template. Template arguments accept a name (exact or unique partial), not just a path or ID.
+Templates: sitecore_get_template shows an item's fields (own + inherited) with types - call it before setting fields so you use real names. sitecore_list_templates finds a template. Template arguments accept a name as well as a path or ID: search resolves a unique partial name, but write args (create_item.template, create_template.baseTemplates) require a path, ID, or EXACT name and fail loudly (never a fuzzy guess) - important because a duplicate template name across brand folders is common and only a path or ID can disambiguate.
 
 Reads: get_item returns populated non-standard fields by default; an empty field map is normal for structural items and carries a hint plus fieldStats. Pass includeStandardFields/includeEmpty or explicit 'fields' for more. Search hits are grouped by item, listing the languages each matched.
 

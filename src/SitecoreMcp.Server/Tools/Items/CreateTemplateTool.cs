@@ -23,7 +23,7 @@ namespace SitecoreMcp.Server.Tools.Items
         public string Database { get; set; }
 
         /// <summary>Base templates to inherit from, by name/path/ID; defaults to the Standard Template.</summary>
-        [McpParam(Description = "Base templates to inherit from, each by name, path, or ID. Defaults to the Standard Template when omitted.")]
+        [McpParam(Description = "Base templates to inherit from, each by path, ID, or exact name (no partial-name matching, so inheritance is never a fuzzy guess). Defaults to the Standard Template when omitted.")]
         public string[] BaseTemplates { get; set; }
 
         /// <summary>The sections and their fields to create on the template.</summary>
@@ -106,7 +106,7 @@ namespace SitecoreMcp.Server.Tools.Items
             var resolved = new List<Item>();
             foreach (var reference in references)
             {
-                resolved.Add(TemplateResolver.Resolve(db, reference));
+                resolved.Add(TemplateResolver.Resolve(db, reference, allowPartial: false));
             }
 
             return resolved;

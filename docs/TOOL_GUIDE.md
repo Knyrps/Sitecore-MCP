@@ -42,9 +42,14 @@ correct `_name` field.
 - **`sitecore_get_template`** — an item's template with all fields (own **and inherited**), types,
   and sections. Call it before writing fields so you use real field names instead of guessing.
 - **`sitecore_list_templates`** — find a template by a name substring.
-- Template arguments (`search.template`, `create_item.template`) accept a **name** (exact, or a
-  unique partial), not just a path/ID. `search` echoes `resolvedTemplate` so you see what a partial
-  name matched — e.g. `"Local Datasource"` → `"Local Datasource Folder"`.
+- Template arguments accept a **name**, not just a path/ID — but partial matching differs by intent.
+  `search.template` (discovery) resolves a **unique partial** name and echoes `resolvedTemplate` so
+  you see what matched — e.g. `"Local Datasource"` → `"Local Datasource Folder"`. The **write** args
+  (`create_item.template`, `create_template.baseTemplates`) accept only a path, ID, or **exact**
+  name: a template that sets structure or inheritance is never chosen by a fuzzy guess. A name with
+  no exact match fails **loudly** (listing near matches) rather than silently resolving to the wrong
+  template — decisive because a duplicate name (e.g. `Site` under several brand folders) is common
+  and can only be told apart by path/ID.
 
 ## Reads — output shape
 
