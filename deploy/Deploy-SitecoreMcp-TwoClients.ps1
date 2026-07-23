@@ -50,9 +50,17 @@ if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdenti
 
 $repoRoot = Split-Path $PSScriptRoot -Parent
 $serverDir = Join-Path $repoRoot "src\SitecoreMcp.Server"
+
+# Build here rather than trusting whatever is already in bin\$Configuration. Deploying a pre-built
+# artifact silently ships stale code when it was built for a different configuration or not rebuilt
+# after an edit (a hash check on the copy cannot catch that - the stale source copies cleanly).
+Write-Host "Building $Configuration against $WebRoot..." -ForegroundColor Cyan
+& dotnet build (Join-Path $serverDir "SitecoreMcp.Server.csproj") -c $Configuration -p:SitecoreWebRoot=$WebRoot --nologo -v minimal
+if ($LASTEXITCODE -ne 0) { throw "Build failed; aborting deploy so a stale assembly is never shipped." }
+
 $dll = Join-Path $serverDir "bin\$Configuration\SitecoreMcp.Server.dll"
 if (-not (Test-Path $dll)) {
-    throw "Build output not found at $dll. Build first: dotnet build -c $Configuration"
+    throw "Build output not found at $dll after build."
 }
 
 $binTarget = Join-Path $WebRoot "bin"

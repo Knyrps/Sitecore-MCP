@@ -5,8 +5,8 @@ app-pool environment, and app-pool recycling are all admin-only.
 
 ## Steps
 
-1. Build against the target instance's assemblies. Point the build at it with a gitignored
-   `Directory.Build.user.props` at the repo root:
+1. Point the build at the target instance with a gitignored `Directory.Build.user.props` at the
+   repo root:
 
    ```xml
    <Project>
@@ -14,10 +14,6 @@ app-pool environment, and app-pool recycling are all admin-only.
        <SitecoreWebRoot>C:\inetpub\wwwroot\sitecore.local</SitecoreWebRoot>
      </PropertyGroup>
    </Project>
-   ```
-
-   ```powershell
-   dotnet build -c Release
    ```
 
    The server DLL binds to the exact `Sitecore.Kernel` and `Newtonsoft.Json` in that web root, so
@@ -30,9 +26,12 @@ app-pool environment, and app-pool recycling are all admin-only.
    ./deploy/Deploy-SitecoreMcp.ps1 -WebRoot C:\inetpub\wwwroot\sitecore.local
    ```
 
-   This copies the DLL and `SitecoreMcp.config`, writes a `SitecoreMcp.Dev.config` that enables the
-   endpoint over HTTP with an admin-mapped client, sets `SITECORE_MCP_KEY` on the app pool, and
-   recycles it. It prints the generated key.
+   The script **builds** the project first (so it never ships a stale or wrong-configuration
+   artifact), then copies the DLL and `SitecoreMcp.config`, writes a `SitecoreMcp.Dev.config` that
+   enables the endpoint over HTTP with an admin-mapped client, sets `SITECORE_MCP_KEY` on the app
+   pool, and recycles it. It prints the generated key. It defaults to `Release`; pass
+   `-Configuration Debug` only if you deliberately want a Debug build — the same configuration is
+   built and deployed, so they can never drift.
 
 3. Verify:
 
