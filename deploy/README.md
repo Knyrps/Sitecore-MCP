@@ -3,6 +3,11 @@
 Deploying into an IIS-hosted Sitecore instance needs an **elevated** shell: the web root, the
 app-pool environment, and app-pool recycling are all admin-only.
 
+If you have granted your account those rights directly (for example, write access to the web root),
+pass **`-SkipAdminRequirement`** to run without elevation. It waives the *check*, not the
+permissions — setting app-pool environment variables edits `applicationHost.config` and starting or
+stopping the pool talks to the IIS service, so both still fail without administrator rights.
+
 ## Steps
 
 1. Point the build at the target instance with a gitignored `Directory.Build.user.props` at the

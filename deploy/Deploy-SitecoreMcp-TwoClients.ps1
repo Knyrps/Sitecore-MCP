@@ -1,6 +1,7 @@
 <#
 .SYNOPSIS
-  Deploys the SitecoreMCP endpoint with TWO clients: an admin client and a non-admin client. Run ELEVATED.
+  Deploys the SitecoreMCP endpoint with TWO clients: an admin client and a non-admin client. Run
+  ELEVATED, or pass -SkipAdminRequirement on a machine where this account already holds the needed rights.
 
 .DESCRIPTION
   Exactly like Deploy-SitecoreMcp.ps1, but the local dev patch registers a second client mapped to a
@@ -28,6 +29,11 @@
 .PARAMETER AppPool
   The IIS app pool name. Auto-detected from the site binding when omitted.
 
+.PARAMETER SkipAdminRequirement
+  Skips the elevation check, for a machine where the account has been granted the needed rights
+  directly (e.g. write access to the web root). This only skips the check - it grants nothing, so
+  steps that genuinely require administrator rights still fail without them.
+
 .EXAMPLE
   ./Deploy-SitecoreMcp-TwoClients.ps1 -WebRoot C:\inetpub\wwwroot\sitecore.local
 #>
@@ -38,14 +44,23 @@ param(
     [string] $Key,
     [string] $EditorKey,
     [string] $EditorUser = "sitecore\mcp-editor",
-    [string] $AppPool
+    [string] $AppPool,
+    [switch] $SkipAdminRequirement
 )
 
 $ErrorActionPreference = "Stop"
 Import-Module WebAdministration -ErrorAction Stop
 
-if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltinRole]::Administrator)) {
-    throw "This script must be run from an elevated PowerShell (Run as Administrator)."
+$isAdmin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltinRole]::Administrator)
+if (-not $isAdmin) {
+    if (-not $SkipAdminRequirement) {
+        throw "This script must be run from an elevated PowerShell (Run as Administrator). Pass -SkipAdminRequirement if this account has already been granted the rights it needs."
+    }
+
+    # The switch waives the check, not the permissions: writing app-pool environment variables edits
+    # applicationHost.config, and starting/stopping the pool talks to the IIS service - both still
+    # need administrator rights and will fail here without them.
+    Write-Warning "Running without elevation (-SkipAdminRequirement). Copying files works if this account can write to the web root, but setting app-pool environment variables and restarting the pool still require administrator rights."
 }
 
 $repoRoot = Split-Path $PSScriptRoot -Parent
