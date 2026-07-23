@@ -44,6 +44,15 @@ app-pool environment, and app-pool recycling are all admin-only.
    instance name, version, and resolved user. Then check that `App_Data/logs/mcp.log.<date>.txt`
    exists and contains an `AUDIT` line.
 
+## Troubleshooting
+
+**One client's key authenticates, another's 401s no matter what.** Every `<client>` needs a unique
+`id` attribute. Sitecore's config merge keys collection elements by their identifying attribute, so
+two `<client>` nodes without one collapse into a single node (last wins) and only that one is built.
+The symptom is a "correct" `applicationHost.config` and a full restart that still leaves one key
+rejected. Confirm both clients exist by attaching to the worker and checking `_clients.Count`, or
+just verify each `<client>` in `SitecoreMcp.Dev.config` has a distinct `id`.
+
 ## Production
 
 The dev patch is local-only: it disables HTTPS and maps an admin user. On a shared instance, skip
