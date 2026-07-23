@@ -107,7 +107,7 @@ namespace SitecoreMcp.Server.Tools.Search
         /// <inheritdoc />
         protected override McpToolResult Execute(SearchArgs args, McpCallContext context)
         {
-            var db = context.ResolveDatabase(string.IsNullOrEmpty(args.Database) ? "master" : args.Database);
+            var db = context.ResolveDatabase(args.Database);
             var indexName = $"sitecore_{db.Name}_index";
 
             var index = ContentSearchManager.GetIndex(indexName);
@@ -116,10 +116,7 @@ namespace SitecoreMcp.Server.Tools.Search
                 throw new McpToolException($"Search index '{indexName}' does not exist.");
             }
 
-            var offset = Math.Max(0, args.Offset.GetValueOrDefault(0));
-            var limit = args.Limit.GetValueOrDefault(DefaultLimit);
-            if (limit < 1) limit = DefaultLimit;
-            if (limit > MaxLimit) limit = MaxLimit;
+            var range = Paging.Resolve(args.Offset, args.Limit, DefaultLimit, MaxLimit);
 
             using (var searchContext = index.CreateSearchContext())
             {
@@ -150,7 +147,7 @@ namespace SitecoreMcp.Server.Tools.Search
                     return McpToolResult.Structured(countResult);
                 }
 
-                var results = query.Skip(offset).Take(limit).GetResults();
+                var results = query.Skip(range.Offset).Take(range.Limit).GetResults();
 
                 // The index holds one document per item/language/version, so collapse those into one
                 // hit per item that lists the languages it matched — otherwise a page is mostly the
@@ -188,13 +185,15 @@ namespace SitecoreMcp.Server.Tools.Search
 
                 var hits = new JArray(order.Select(id => (object)byItem[id]).ToArray());
 
+                // Bespoke envelope: hits are grouped by item, so hasMore compares the raw document
+                // count on this page (rawCount), not the grouped hits.Count, to the total.
                 var searchResult = new JObject
                 {
                     ["index"] = indexName,
                     ["total"] = results.TotalSearchResults,
-                    ["offset"] = offset,
+                    ["offset"] = range.Offset,
                     ["count"] = hits.Count,
-                    ["hasMore"] = offset + rawCount < results.TotalSearchResults,
+                    ["hasMore"] = range.Offset + rawCount < results.TotalSearchResults,
                     ["hits"] = hits
                 };
                 if (templateInfo != null) searchResult["resolvedTemplate"] = templateInfo;

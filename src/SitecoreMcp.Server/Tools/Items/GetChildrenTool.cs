@@ -35,33 +35,21 @@ namespace SitecoreMcp.Server.Tools.Items
         {
             var parent = ItemResolver.Resolve(context, args.Path, args.Database, args.Language);
 
-            var offset = args.Offset.GetValueOrDefault(0);
-            if (offset < 0) offset = 0;
-            var limit = args.Limit.GetValueOrDefault(DefaultLimit);
-            if (limit < 1) limit = DefaultLimit;
-            if (limit > MaxLimit) limit = MaxLimit;
-
+            var range = Paging.Resolve(args.Offset, args.Limit, DefaultLimit, MaxLimit);
             var projector = new ItemProjector(context);
             var all = parent.Children;
             var total = all.Count;
 
             var children = new JArray();
-            var taken = 0;
-            for (var i = offset; i < total && taken < limit; i++, taken++)
+            for (int i = range.Offset, taken = 0; i < total && taken < range.Limit; i++, taken++)
             {
                 children.Add(projector.ProjectSummary(all[i]));
             }
 
-            return McpToolResult.Structured(new JObject
-            {
-                ["parentId"] = parent.ID.ToString(),
-                ["parentPath"] = parent.Paths.FullPath,
-                ["total"] = total,
-                ["offset"] = offset,
-                ["count"] = taken,
-                ["hasMore"] = offset + taken < total,
-                ["children"] = children
-            });
+            var result = Paging.Envelope("children", children, total, range);
+            result["parentId"] = parent.ID.ToString();
+            result["parentPath"] = parent.Paths.FullPath;
+            return McpToolResult.Structured(result);
         }
     }
 }

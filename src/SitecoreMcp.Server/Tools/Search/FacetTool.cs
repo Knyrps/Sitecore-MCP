@@ -64,7 +64,7 @@ namespace SitecoreMcp.Server.Tools.Search
         /// <inheritdoc />
         protected override McpToolResult Execute(FacetArgs args, McpCallContext context)
         {
-            var db = context.ResolveDatabase(string.IsNullOrEmpty(args.Database) ? "master" : args.Database);
+            var db = context.ResolveDatabase(args.Database);
             var indexName = $"sitecore_{db.Name}_index";
             var index = ContentSearchManager.GetIndex(indexName);
             if (index == null)

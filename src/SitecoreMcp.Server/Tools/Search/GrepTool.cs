@@ -81,7 +81,7 @@ namespace SitecoreMcp.Server.Tools.Search
         /// <inheritdoc />
         protected override McpToolResult Execute(GrepArgs args, McpCallContext context)
         {
-            var db = context.ResolveDatabase(string.IsNullOrEmpty(args.Database) ? "master" : args.Database);
+            var db = context.ResolveDatabase(args.Database);
 
             var root = db.GetItem(args.RootPath);
             if (root == null)
@@ -95,9 +95,8 @@ namespace SitecoreMcp.Server.Tools.Search
                 throw new McpToolException($"Search index for database '{db.Name}' does not exist.");
             }
 
-            var maxScan = Clamp(args.MaxScan.GetValueOrDefault(DefaultMaxScan), 1, MaxMaxScan);
-            var limit = Clamp(args.Limit.GetValueOrDefault(DefaultLimit), 1, MaxLimit);
-            var offset = Math.Max(0, args.Offset.GetValueOrDefault(0));
+            var range = Paging.Resolve(args.Offset, args.Limit, DefaultLimit, MaxLimit);
+            var maxScan = Paging.Clamp(args.MaxScan.GetValueOrDefault(DefaultMaxScan), 1, MaxMaxScan);
             var matcher = BuildMatcher(args);
             var wanted = args.Fields != null && args.Fields.Length > 0
                 ? new HashSet<string>(args.Fields, StringComparer.OrdinalIgnoreCase)
@@ -163,8 +162,10 @@ namespace SitecoreMcp.Server.Tools.Search
                 }
             }
 
-            var page = matches.Skip(offset).Take(limit).ToList();
+            var page = matches.Skip(range.Offset).Take(range.Limit).ToList();
 
+            // Bespoke envelope: grep reports scan bookkeeping (scanned/scanTruncated) and its total
+            // under 'matches', so it does not use the shared Paging.Envelope shape.
             return McpToolResult.Structured(new JObject
             {
                 ["root"] = root.Paths.FullPath,
@@ -172,9 +173,9 @@ namespace SitecoreMcp.Server.Tools.Search
                 ["scanTruncated"] = scanTruncated,
                 ["matches"] = matches.Count,
                 ["matchesTruncated"] = collectionTruncated,
-                ["offset"] = offset,
+                ["offset"] = range.Offset,
                 ["count"] = page.Count,
-                ["hasMore"] = offset + page.Count < matches.Count,
+                ["hasMore"] = range.Offset + page.Count < matches.Count,
                 ["hits"] = new JArray(page.Cast<object>().ToArray())
             });
         }
@@ -257,7 +258,5 @@ namespace SitecoreMcp.Server.Tools.Search
             if (end < value.Length) slice = slice + "...";
             return slice;
         }
-
-        private static int Clamp(int value, int min, int max) => Math.Max(min, Math.Min(max, value));
     }
 }

@@ -49,7 +49,7 @@ namespace SitecoreMcp.Server.Tools.Items
         /// <inheritdoc />
         protected override McpToolResult Execute(ListTemplatesArgs args, McpCallContext context)
         {
-            var db = context.ResolveDatabase(string.IsNullOrEmpty(args.Database) ? "master" : args.Database);
+            var db = context.ResolveDatabase(args.Database);
 
             var filter = args.NameContains;
             var matches = TemplateManager.GetTemplates(db).Values
@@ -58,27 +58,17 @@ namespace SitecoreMcp.Server.Tools.Items
                 .OrderBy(t => t.FullName, StringComparer.OrdinalIgnoreCase)
                 .ToList();
 
-            var offset = Math.Max(0, args.Offset.GetValueOrDefault(0));
-            var limit = args.Limit.GetValueOrDefault(DefaultLimit);
-            if (limit < 1) limit = DefaultLimit;
-            if (limit > MaxLimit) limit = MaxLimit;
+            var range = Paging.Resolve(args.Offset, args.Limit, DefaultLimit, MaxLimit);
 
             var page = new JArray();
-            var taken = 0;
-            for (var i = offset; i < matches.Count && taken < limit; i++, taken++)
+            for (int i = range.Offset, taken = 0; i < matches.Count && taken < range.Limit; i++, taken++)
             {
                 page.Add(Describe(db, matches[i]));
             }
 
-            return McpToolResult.Structured(new JObject
-            {
-                ["database"] = db.Name,
-                ["total"] = matches.Count,
-                ["offset"] = offset,
-                ["count"] = taken,
-                ["hasMore"] = offset + taken < matches.Count,
-                ["templates"] = page
-            });
+            var result = Paging.Envelope("templates", page, matches.Count, range);
+            result["database"] = db.Name;
+            return McpToolResult.Structured(result);
         }
 
         private static JObject Describe(Sitecore.Data.Database db, Template template)

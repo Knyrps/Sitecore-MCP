@@ -33,14 +33,15 @@ namespace SitecoreMcp.Server.Tools
         public bool AllowWrites => Client.AllowWrites && Settings.AllowWrites;
 
         /// <summary>
-        /// Resolves a database by name, rejecting one outside the client's allow-list or one that
-        /// does not exist. Throws <see cref="McpToolException"/> so the failure reaches the model.
+        /// Resolves a database by name, defaulting to master when none is given, and rejecting one
+        /// outside the client's allow-list or one that does not exist. Throws
+        /// <see cref="McpToolException"/> so the failure reaches the model.
         /// </summary>
         public Database ResolveDatabase(string name)
         {
             if (string.IsNullOrEmpty(name))
             {
-                throw new McpToolException("No database was specified.");
+                name = "master";
             }
 
             if (!Client.CanUseDatabase(name))

@@ -13,7 +13,7 @@ namespace SitecoreMcp.Server.Tools
         /// </summary>
         public static Item Resolve(McpCallContext context, string pathOrId, string database, string language)
         {
-            var db = context.ResolveDatabase(string.IsNullOrEmpty(database) ? "master" : database);
+            var db = context.ResolveDatabase(database);
             var lang = context.ResolveLanguage(language);
 
             var item = ID.IsID(pathOrId)
