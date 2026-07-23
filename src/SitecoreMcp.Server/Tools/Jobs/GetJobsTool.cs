@@ -3,6 +3,7 @@ using System.Linq;
 using Newtonsoft.Json.Linq;
 using Sitecore.Abstractions;
 using Sitecore.Jobs;
+using Sitecore.Publishing;
 using SitecoreMcp.Server.Protocol;
 using SitecoreMcp.Server.Schema;
 
@@ -69,23 +70,37 @@ namespace SitecoreMcp.Server.Tools.Jobs
 
         private static McpToolResult Describe(string handle)
         {
-            var job = FindJob(handle);
-            if (job == null)
+            var parsed = Sitecore.Handle.Parse(handle);
+            if (parsed != null)
             {
-                // A finished job is reaped once its AfterLife elapses, so an unknown handle is a
-                // normal outcome for a job that already completed - not an error.
-                return McpToolResult.Structured(new JObject
+                var job = JobManager.GetJob(parsed);
+                if (job != null)
                 {
-                    ["handle"] = handle,
-                    ["found"] = false,
-                    ["hint"] = "No job with this handle. It may have finished and been released, " +
-                               "or the handle may be from a previous application lifetime."
-                });
+                    var described = JobDescriber.Describe(job);
+                    described["kind"] = "job";
+                    described["found"] = true;
+                    return McpToolResult.Structured(described);
+                }
+
+                // A publish handle is not a job handle: PublishManager tracks a publish separately
+                // from the jobs it spawns, so a publish handle only resolves here.
+                var publish = JobDescriber.DescribePublish(handle, PublishManager.GetStatus(parsed));
+                if (publish != null)
+                {
+                    publish["found"] = true;
+                    return McpToolResult.Structured(publish);
+                }
             }
 
-            var result = JobDescriber.Describe(job);
-            result["found"] = true;
-            return McpToolResult.Structured(result);
+            // A finished job is reaped once its AfterLife elapses, so an unknown handle is a
+            // normal outcome for a job that already completed - not an error.
+            return McpToolResult.Structured(new JObject
+            {
+                ["handle"] = handle,
+                ["found"] = false,
+                ["hint"] = "No job or publish with this handle. It may have finished and been " +
+                           "released, or the handle may be from a previous application lifetime."
+            });
         }
 
         /// <summary>

@@ -1,7 +1,9 @@
 using System;
 using System.Collections;
+using System.Collections.Specialized;
 using Newtonsoft.Json.Linq;
 using Sitecore.Abstractions;
+using Sitecore.Publishing;
 
 namespace SitecoreMcp.Server.Tools.Jobs
 {
@@ -58,6 +60,48 @@ namespace SitecoreMcp.Server.Tools.Jobs
                 }
             }
 
+            return result;
+        }
+
+        /// <summary>
+        /// Describes a publish by its handle. A publish handle is not a job handle - PublishManager
+        /// tracks it separately - so this projects the same shape (state, progress, messages) to keep
+        /// polling uniform no matter which kind of handle the caller holds.
+        /// </summary>
+        public static JObject DescribePublish(string handle, PublishStatus status)
+        {
+            if (status == null)
+            {
+                return null;
+            }
+
+            var messages = Messages(status.Messages);
+
+            return new JObject
+            {
+                ["handle"] = handle,
+                ["kind"] = "publish",
+                ["state"] = status.State.ToString(),
+                ["isDone"] = status.IsDone,
+                ["failed"] = status.Failed,
+                ["expired"] = status.Expired,
+                ["processed"] = status.Processed,
+                ["currentTarget"] = status.CurrentTarget?.Name,
+                ["currentLanguage"] = status.CurrentLanguage?.Name,
+                ["messageCount"] = messages.Length,
+                ["messages"] = Tail(messages)
+            };
+        }
+
+        private static string[] Messages(StringCollection messages)
+        {
+            if (messages == null)
+            {
+                return new string[0];
+            }
+
+            var result = new string[messages.Count];
+            messages.CopyTo(result, 0);
             return result;
         }
 

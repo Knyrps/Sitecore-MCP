@@ -108,9 +108,14 @@ authoring database only — `sitecore_publish_item` is what pushes an item to th
   force-republishes), `deep` (descendants), `publishRelatedItems` (datasources and media the item
   references), plus explicit `targetDatabases` / `languages` when you don't want the configured
   defaults.
-- **Publishing is asynchronous.** The tool returns a **job handle** as soon as the job starts — a
+- **Publishing is asynchronous.** The tool returns a **handle** as soon as the publish starts — a
   handle means *started*, never *finished*. Poll **`sitecore_get_jobs`** with it to read `state`
-  (`Running` → `Finished`), `processed`/`total`, and any messages or exceptions.
+  (`Initializing` → `Finished`), `processed`, and the messages (`Items created/updated/skipped`).
+- **A publish handle is not a job handle.** Sitecore tracks a publish separately from the jobs it
+  spawns, so the handle `publish_item` returns will never appear in the `get_jobs` *list* — the list
+  shows the underlying `Publish to 'web'` job under its own handle. `get_jobs` resolves **both** kinds
+  when given a `handle` and tags which it found via `kind` (`publish` or `job`), so polling works
+  whichever you hold.
 - **Targets respect the client's `databases` allow-list.** A client scoped to `master` alone cannot
   publish to `web` — that's deliberate (a limited client shouldn't push content live). Widen the
   client's `databases` in config if it should be able to.

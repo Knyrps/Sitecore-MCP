@@ -93,10 +93,12 @@ namespace SitecoreMcp.Server.Tools.Publishing
                 ["note"] = "Publishing runs in the background. Poll sitecore_get_jobs with this handle to confirm completion."
             };
 
-            var job = JobManager.GetJob(handle);
-            if (job != null)
+            // The returned handle tracks the publish, not the jobs it spawns, so its status comes
+            // from PublishManager rather than JobManager - the same lookup sitecore_get_jobs makes.
+            var status = JobDescriber.DescribePublish(handle.ToString(), PublishManager.GetStatus(handle));
+            if (status != null)
             {
-                result["job"] = JobDescriber.Describe(job);
+                result["status"] = status;
             }
 
             return McpToolResult.Structured(result);
