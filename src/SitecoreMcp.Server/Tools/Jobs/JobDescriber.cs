@@ -3,6 +3,7 @@ using System.Collections;
 using System.Collections.Specialized;
 using Newtonsoft.Json.Linq;
 using Sitecore.Abstractions;
+using Sitecore.Jobs;
 using Sitecore.Publishing;
 
 namespace SitecoreMcp.Server.Tools.Jobs
@@ -57,6 +58,14 @@ namespace SitecoreMcp.Server.Tools.Jobs
                 if (exceptions.Count > 0)
                 {
                     result["exceptions"] = exceptions;
+                }
+
+                // An abort is only a request. A job that does not honour it keeps running with this
+                // state set, so say so rather than letting the state alone imply it is stopping.
+                if (status.State == JobState.AbortRequested && !job.IsDone)
+                {
+                    result["note"] = "An abort has been requested but the job has not stopped. A job " +
+                                     "that does not honour the request keeps running to completion.";
                 }
             }
 

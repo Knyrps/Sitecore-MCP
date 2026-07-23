@@ -129,6 +129,13 @@ authoring database only — `sitecore_publish_item` is what pushes an item to th
   job — but on a stock instance those publish jobs report `abortable: false` too, so in practice a
   running publish has to finish. Prefer scoping the publish (a narrower path, `deep: false`) over
   starting a large one you may want to stop.
+- **`force: true` is a signal, not a kill — and publish ignores it.** Measured on 10.3: signalling a
+  running `Publish to 'web'` job set its state to `AbortRequested`, and it carried on processing
+  (1,598 → 2,927 items over the next 30s) and ran to completion. The flag sticks even when the job
+  ignores it, so `get_jobs` will show `AbortRequested` for a job that is still running — it adds a
+  note saying exactly that. Use `force` only for job types you expect to honour it; there is
+  deliberately **no thread-kill**, because the job runs in this same worker process as the site and
+  aborting its thread can leave a half-written item, a leaked connection, or a stranded lock.
 
 ## Search — the full query surface
 

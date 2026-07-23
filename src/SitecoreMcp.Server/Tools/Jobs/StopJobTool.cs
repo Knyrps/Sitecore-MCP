@@ -12,6 +12,10 @@ namespace SitecoreMcp.Server.Tools.Jobs
         /// <summary>The handle of the job to abort.</summary>
         [McpParam(Description = "Handle of the job to abort, as returned by sitecore_get_jobs or by the tool that started it.", Required = true)]
         public string Handle { get; set; }
+
+        /// <summary>Whether to signal a job that does not declare itself abortable.</summary>
+        [McpParam(Description = "Send the abort signal even to a job that does not declare itself abortable. The signal is only a request: such a job is free to ignore it and keep running, and the result says whether the state actually changed. It is never a forced kill.")]
+        public bool? Force { get; set; }
     }
 
     /// <summary>
@@ -71,21 +75,30 @@ namespace SitecoreMcp.Server.Tools.Jobs
             }
 
             // Sitecore exposes no forced stop: no BaseJob.Abort(), no JobManager.Stop(). The only
-            // way to kill a non-abortable job would be aborting its thread, which can tear down a
-            // partial write and leak locks, so a job that does not opt in is left alone.
-            if (job.Options?.Abortable != true)
+            // way to kill a job outright would be aborting its thread, which runs in this same
+            // worker process - it can tear an item write in half, leak a database connection, or
+            // strand an item lock, so it is deliberately not offered.
+            var abortable = job.Options?.Abortable == true;
+            var force = args.Force.GetValueOrDefault(false);
+
+            if (!abortable && !force)
             {
-                result["reason"] = "This job does not support aborting. Sitecore offers no safe way to " +
-                                   "force it to stop, so it has been left running.";
+                result["reason"] = "This job does not declare itself abortable, so no signal was sent. " +
+                                   "Pass force=true to signal it anyway - the job may still ignore it.";
                 return McpToolResult.Structured(result);
             }
 
+            // Abortable is what the job declares, not necessarily what its body honours, so a forced
+            // signal is still just a request: set the state, then read it back and report what stuck.
             job.Status.State = JobState.AbortRequested;
+            var observed = job.Status.State;
 
             result["abortRequested"] = true;
-            result["state"] = job.Status.State.ToString();
-            result["note"] = "Abort requested. The job stops at its next safe point - poll " +
-                             "sitecore_get_jobs with this handle to confirm it reached Aborted.";
+            result["forced"] = !abortable;
+            result["state"] = observed.ToString();
+            result["note"] = abortable
+                ? "Abort requested. The job stops at its next safe point - poll sitecore_get_jobs with this handle to confirm it reached Aborted."
+                : "Abort signalled to a job that does not declare itself abortable, so it may ignore the request and run to completion. This is a request, never a forced kill - poll sitecore_get_jobs to see whether it actually stops.";
             return McpToolResult.Structured(result);
         }
     }
