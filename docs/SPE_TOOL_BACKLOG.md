@@ -42,16 +42,16 @@ semantics (start, return a handle, poll) from the outset rather than blocking th
 
 *(Deferred alongside Diagnostics for this planning pass — see the implementation plan.)*
 
-## 4b. `Tools/Jobs` — manage jobs
+## 4b. `Tools/Jobs` — observe jobs
 
-Sitecore doesn't natively support stopping an arbitrary running job. This category is scoped so it
-never claims a stop succeeded when it didn't — see the implementation plan for the per-job-type
-design.
+- [x] `sitecore_get_jobs` — list running Sitecore jobs; poll publish/rebuild-index progress
 
-- [ ] `sitecore_get_jobs` — list running Sitecore jobs; poll publish/rebuild-index progress
-- [ ] `sitecore_stop_job` — **new, custom (no native SPE/Sitecore equivalent)**. Real stop for index
-      jobs via `IndexCustodian.Stop`; honest "not supported" for job types with no safe stop path.
-      Explicitly excludes `Thread.Abort`-style hard kills — see rationale in the implementation plan.
+**Stopping a job was investigated and dropped.** Sitecore exposes no safe cancel: there is no
+`BaseJob.Abort()` or `JobManager.Stop()`, publish jobs report `abortable: false`, and setting
+`JobState.AbortRequested` anyway is simply ignored (measured on 10.3 — a signalled publish ran to
+completion). The remaining options were a `Thread.Abort` on a thread inside the same worker process as
+the live site, or the widely-circulated trick of marking a job `Finished` and expiring it — which only
+hides the entry while the work keeps running. Both were rejected as worse than not offering the tool.
 
 ## 5. `Tools/Membership` (new)
 
@@ -87,6 +87,7 @@ design.
 
 ---
 
-**Total: ~36 tools** (34 from the original triage, plus `rebuild_link_database` and `stop_job`,
-added during restructuring). `Tools/Jobs` §4a and Diagnostics are **deferred** — see
-[IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for the detailed design of everything else.
+**Total: ~35 tools** (34 from the original triage, plus `rebuild_link_database`; a `stop_job` was
+added during restructuring and then dropped, see §4b). `Tools/Jobs` §4a and Diagnostics are
+**deferred** — see [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for the detailed design of
+everything else.

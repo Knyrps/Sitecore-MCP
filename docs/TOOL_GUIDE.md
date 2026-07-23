@@ -119,23 +119,13 @@ authoring database only — `sitecore_publish_item` is what pushes an item to th
 - **Targets respect the client's `databases` allow-list.** A client scoped to `master` alone cannot
   publish to `web` — that's deliberate (a limited client shouldn't push content live). Widen the
   client's `databases` in config if it should be able to.
-- **`stop_job`** — Sitecore's abort is **cooperative**, not a kill. It only works on jobs that
-  declare themselves abortable, and it asks the job to unwind at its next safe point; the result says
-  `abortRequested`, and you confirm with `get_jobs` that the job actually reached `Aborted`. A
-  non-abortable job is reported as such and left running — there is no safe forced stop, and the tool
-  will not pretend otherwise.
-- **A publish cannot be aborted at all.** Passing a *publish* handle to `stop_job` reports the
-  publish's real state and points you at `get_jobs` to find the underlying `Publish to '<target>'`
-  job — but on a stock instance those publish jobs report `abortable: false` too, so in practice a
-  running publish has to finish. Prefer scoping the publish (a narrower path, `deep: false`) over
-  starting a large one you may want to stop.
-- **`force: true` is a signal, not a kill — and publish ignores it.** Measured on 10.3: signalling a
-  running `Publish to 'web'` job set its state to `AbortRequested`, and it carried on processing
-  (1,598 → 2,927 items over the next 30s) and ran to completion. The flag sticks even when the job
-  ignores it, so `get_jobs` will show `AbortRequested` for a job that is still running — it adds a
-  note saying exactly that. Use `force` only for job types you expect to honour it; there is
-  deliberately **no thread-kill**, because the job runs in this same worker process as the site and
-  aborting its thread can leave a half-written item, a leaked connection, or a stranded lock.
+- **A running publish cannot be stopped — scope it instead.** There is no tool to cancel one, because
+  Sitecore offers no safe way to do it: publish jobs report `abortable: false`, and setting the abort
+  state anyway is simply ignored (measured on 10.3 — a signalled `Publish to 'web'` carried on from
+  1,598 to 2,927 items and ran to completion). Killing the job's thread is not an option either: it
+  runs in the same worker process as the site, so aborting it can leave a half-written item, a leaked
+  connection, or a stranded lock. Prefer a narrow path and `deep: false` over starting a large publish
+  you may regret.
 
 ## Search — the full query surface
 

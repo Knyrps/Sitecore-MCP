@@ -62,34 +62,35 @@ wanted; it is deliberately not this tool.
   with a hint, not an error — a job can finish and be reaped between calls.
 - **Returns:** `{ jobs: [ { handle, name, category, state, processed, total, messages } ] }`.
 
-### `sitecore_stop_job`
-**Design corrected after reflecting over Kernel 18.0.0.0** — the original guess
-(`IndexCustodian.Stop(ISearchIndex)`) does not exist; `IndexCustodian` only exposes a *global*
-`StopIndexing()`/`PauseIndexing()`, which is far too blunt. What does exist is better:
+### Stopping a job — built, measured, and removed
 
-- `Sitecore.Abstractions.BaseJobOptions.Abortable { get; }` — jobs declare whether they can be aborted.
-- `Sitecore.Abstractions.BaseJobStatus.State { get; set; }` — settable.
-- `Sitecore.Jobs.JobState` includes `AbortRequested` and `Aborted`.
+A `sitecore_stop_job` was designed, implemented, and then deleted once tested against a real
+long-running publish. Recorded here so the idea is not revisited from scratch.
 
-That is Sitecore's own **cooperative abort** protocol: request the abort, and an abortable job body
-observes the flag and unwinds cleanly at a safe point.
+**What Sitecore actually offers.** There is no `BaseJob.Abort()` and no `JobManager.Stop()`. The
+original design guessed `IndexCustodian.Stop(ISearchIndex)`, which does not exist — `IndexCustodian`
+only has a *global* `StopIndexing()`. What does exist is a cooperative protocol:
+`BaseJobOptions.Abortable` (jobs declare it), `BaseJobStatus.State` (settable), and a `JobState` with
+`AbortRequested`/`Aborted`.
 
-- **Args:** `handle` (string, required).
-- **Sitecore APIs:** `JobManager.GetJob(Handle.Parse(handle))`, then set
-  `job.Status.State = JobState.AbortRequested` when `job.Options.Abortable` is true.
-- **Behavior:** resolve the job; if already finished, say so; if not abortable, say so; otherwise
-  request the abort and report that it was *requested*.
-- **Safety / edge cases — the design decision behind this tool:** there is no `BaseJob.Abort()` and
-  no `JobManager.Stop()`. The only way to force-kill a non-abortable job would be reflecting into
-  its thread and calling `Thread.Abort()`. **Explicitly excluded**: that can fire mid-write (corrupt
-  index segment, half-written row), does not guarantee lock release, and is an API .NET itself
-  deprecated for exactly these reasons. Cooperative abort is a *request*, not a guaranteed kill — the
-  tool must report it as such and let the caller poll `sitecore_get_jobs` to confirm the job actually
-  reached `Aborted`. Never claim the job stopped. `RequiresWrite => true` (changes running server
-  state, though not an item write).
-- **Returns:** `{ handle, name, abortable, abortRequested: bool, state, note }` —
-  `abortRequested: false` with a reason (already finished / not abortable) is a normal outcome, not
-  a failure.
+**Why it was removed.** Measured on 10.3: every publish job reports `abortable: false`, and setting
+`AbortRequested` anyway is accepted but **ignored** — the signalled `Publish to 'web'` carried on from
+1,598 to 2,927 items and ran to completion, with the state left reading `AbortRequested` the whole
+time. So the tool could not stop the one thing anyone would want to stop, while implying otherwise.
+
+**Rejected alternatives.**
+- `Thread.Abort()` on the job's thread — available on net48, but the thread runs in the *same worker
+  process as the live site*, so it can fire mid-write (half-written item, leaked connection, stranded
+  item lock). A publish that runs too long is a far cheaper failure than an inconsistent `web`.
+- Setting `Status.State = Finished` plus a back-dated `Status.Expiry` (a widely-circulated snippet) —
+  this only marks the status finished and reaps the entry from the job list. The thread keeps
+  publishing. It makes `get_jobs` report `Finished` for work that is still running and destroys the
+  ability to observe it: strictly worse than offering nothing.
+
+**Where that leaves us.** `sitecore_get_jobs` still reports state and progress, and its projection
+notes when a job sits in `AbortRequested` without stopping (a state anything else on the instance may
+set). The guidance is to scope publishes narrowly rather than rely on cancelling them. If a genuinely
+abortable long-running job type appears later, revisit with the cooperative signal only.
 
 ---
 

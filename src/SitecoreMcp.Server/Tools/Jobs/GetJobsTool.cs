@@ -102,15 +102,5 @@ namespace SitecoreMcp.Server.Tools.Jobs
                            "released, or the handle may be from a previous application lifetime."
             });
         }
-
-        /// <summary>
-        /// Resolves a job from a handle string. Shared with the stop tool so both accept exactly the
-        /// same handle format that job-starting tools hand out.
-        /// </summary>
-        internal static BaseJob FindJob(string handle)
-        {
-            var parsed = Sitecore.Handle.Parse(handle);
-            return parsed == null ? null : JobManager.GetJob(parsed);
-        }
     }
 }
