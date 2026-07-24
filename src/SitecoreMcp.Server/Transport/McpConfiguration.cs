@@ -53,8 +53,8 @@ namespace SitecoreMcp.Server.Transport
 
         /// <summary>
         /// Registers a tool from its raw config node: creates it from the type attribute and reads an
-        /// optional admin attribute. The attribute overrides the tool's own default, so which tools
-        /// require an administrator can be tightened or loosened by a config patch on the element.
+        /// optional admin attribute. Config can only ADD an admin requirement, never remove one, so a
+        /// tool that requires an administrator in code stays that way whatever config says.
         /// </summary>
         public void AddTool(XmlNode node)
         {
@@ -66,9 +66,15 @@ namespace SitecoreMcp.Server.Transport
             }
 
             var adminAttribute = XmlUtil.GetAttribute("admin", node);
-            var requiresAdmin = string.IsNullOrEmpty(adminAttribute)
-                ? tool.RequiresAdmin
-                : string.Equals(adminAttribute, "true", StringComparison.OrdinalIgnoreCase);
+            var configRequiresAdmin = string.Equals(adminAttribute, "true", StringComparison.OrdinalIgnoreCase);
+
+            // A code-level admin requirement is a safety net against a config mistake exposing a
+            // privileged tool, so config may tighten the gate but never loosen it.
+            var requiresAdmin = tool.RequiresAdmin || configRequiresAdmin;
+            if (tool.RequiresAdmin && !configRequiresAdmin && !string.IsNullOrEmpty(adminAttribute))
+            {
+                McpLog.Warn($"Tool '{tool.Name}' requires an administrator in code; the admin=\"{adminAttribute}\" config value is ignored, because config can add an admin requirement but not remove one.");
+            }
 
             _registry.AddTool(tool, requiresAdmin);
         }

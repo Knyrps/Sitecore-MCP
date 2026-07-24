@@ -15,10 +15,15 @@ here.
 
 Some tools require an **administrator** client. A tool that needs admin is hidden from `tools/list`
 and refused for a client whose Sitecore user is not an administrator — exactly like a write tool is
-hidden when writes are off. Each tool has a code default, and config overrides it per tool via an
-`admin="true|false"` attribute on the `<tool>` element (so an environment patch can tighten or loosen
-the gate without recompiling). `sitecore_create_template` defaults to admin, since templates are the
-content schema; the upcoming membership/security and schema tools will too.
+hidden when writes are off. Each tool declares a code default, and the `<tool>` config element can
+add an admin requirement via `admin="true"` (e.g. to make publishing admin-only in a stricter
+environment).
+
+**Config can only tighten the gate, never loosen it.** A tool that requires admin in code stays admin
+whatever config says — `admin="false"` on such a tool is ignored and logged. The code requirement is
+a safety net: a config mistake (or an ill-advised patch) must not be able to expose a privileged tool
+like a future password reset. `create_template` (schema) and `index_status` (an index diagnostic)
+require admin in code today; the upcoming membership/security and schema tools will too.
 
 ## Everything runs as your Sitecore user
 
