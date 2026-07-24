@@ -98,6 +98,39 @@ before, unless `AutomaticUnlockOnSaved` already did). A write to an item **locke
 is refused with the owner named, and a save Sitecore rejects (lock/workflow) is reported as an
 error — never a silent success. Move/copy/rename/delete structural ops are not gated by this.
 
+## Presentation — the components on a page
+
+Sitecore holds presentation in two layout fields: a **shared** base (`__Renderings`) and a
+**final**, per-version layout (`__Final Renderings`) stored as a *delta* over the base. Only the
+resolved effective layout is meaningful, so these tools read and write through Sitecore's layout API,
+never the raw field.
+
+- **`get_renderings`** — the components on an item for a device, each with its placeholder,
+  datasource, parameters, and **unique ID**. Reads the effective **final** layout by default (what
+  actually renders, resolving inheritance + the page's own overrides). The unique IDs are how you
+  target the write tools.
+- **`add_rendering`** — place a rendering (by path/ID/exact name) in a placeholder, with optional
+  datasource and parameters. Returns the new instance's unique ID.
+- **`set_rendering`** — change an existing instance's datasource, placeholder, or parameters. Only
+  what you pass changes; for parameters, only supplied keys are touched and a **null value removes**
+  that key (this is also how you read-modify-write parameters).
+- **`switch_rendering`** — swap the component in place, keeping placeholder/datasource/parameters/
+  position and the same unique ID. Atomic — never leaves the placeholder empty the way remove+add can.
+- **`remove_rendering`** — drop an instance by unique ID.
+- **`reset_layout`** — revert the layout field to standard-values inheritance. A no-op on an item with
+  no local layout is reported as `reset: false`, not an error.
+
+**Sharp edges:**
+- **`finalLayout` defaults to true** — edits land on the per-version final layout, the Experience
+  Editor's behaviour and the safe default (it doesn't change other versions or the template's standard
+  values). Pass `finalLayout: false` to change the **shared** base for all versions.
+- **You can target an inherited rendering.** Because reads resolve the effective layout, a rendering
+  inherited from standard values shows up with a unique ID; a `set`/`remove` against it on the final
+  layout creates a per-page override of that inherited component — which is intentional, but means an
+  empty final layout does not imply "nothing to change".
+- **Rendering references are exact-only on writes** (path, ID, or exact name), same as template
+  writes — a name like `Container` is far from unique, so a fuzzy match could place the wrong component.
+
 ## References — what breaks if I change this?
 
 Sitecore's **Link Database** records every field that points at another item. These tools read it,

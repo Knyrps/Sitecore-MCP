@@ -18,12 +18,12 @@ rationale, and the deferred/skipped tools.
 
 ## 3. `Tools/Presentation` (new)
 
-- [ ] `sitecore_get_renderings` — renderings per device: placeholder, datasource, parameters, unique ID
-- [ ] `sitecore_add_rendering`
-- [ ] `sitecore_set_rendering` — updates datasource/placeholder/parameters of an existing instance
-- [ ] `sitecore_remove_rendering`
-- [ ] `sitecore_switch_rendering` — atomic swap of one rendering definition for another
-- [ ] `sitecore_reset_layout` — revert to standard-values inheritance
+- [x] `sitecore_get_renderings` — renderings per device: placeholder, datasource, parameters, unique ID
+- [x] `sitecore_add_rendering`
+- [x] `sitecore_set_rendering` — updates datasource/placeholder/parameters of an existing instance
+- [x] `sitecore_remove_rendering`
+- [x] `sitecore_switch_rendering` — atomic swap of one rendering definition for another
+- [x] `sitecore_reset_layout` — revert to standard-values inheritance
 
 ## 4. Small companions to existing tools
 
