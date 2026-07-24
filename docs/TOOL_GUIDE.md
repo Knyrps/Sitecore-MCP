@@ -11,6 +11,15 @@ here.
   are allowed, and the available databases and languages. It orients an agent and is the fastest way
   to spot a bad deploy or a misconfigured client.
 
+## Admin-gated tools
+
+Some tools require an **administrator** client. A tool that needs admin is hidden from `tools/list`
+and refused for a client whose Sitecore user is not an administrator — exactly like a write tool is
+hidden when writes are off. Each tool has a code default, and config overrides it per tool via an
+`admin="true|false"` attribute on the `<tool>` element (so an environment patch can tighten or loosen
+the gate without recompiling). `sitecore_create_template` defaults to admin, since templates are the
+content schema; the upcoming membership/security and schema tools will too.
+
 ## Everything runs as your Sitecore user
 
 Calls execute under a configured Sitecore user (`UserSwitcher`). Item and field ACLs apply. A field

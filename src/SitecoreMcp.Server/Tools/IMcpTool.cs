@@ -22,6 +22,12 @@ namespace SitecoreMcp.Server.Tools
         /// <summary>Whether the tool mutates content and so requires write permission to appear and run.</summary>
         bool RequiresWrite { get; }
 
+        /// <summary>
+        /// Whether the tool requires an administrator by default and so appears and runs only for a
+        /// client whose Sitecore user is an administrator. Config can override this per tool name.
+        /// </summary>
+        bool RequiresAdmin { get; }
+
         /// <summary>Binds the raw arguments and runs the tool under the given context.</summary>
         McpToolResult Invoke(JObject arguments, McpCallContext context);
     }

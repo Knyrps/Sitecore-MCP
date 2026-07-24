@@ -51,10 +51,26 @@ namespace SitecoreMcp.Server.Transport
             _clients.Add(new McpClient(key, user, allowWrites, databases));
         }
 
-        /// <summary>Registers a tool instance created by Sitecore from its config type.</summary>
-        public void AddTool(IMcpTool tool)
+        /// <summary>
+        /// Registers a tool from its raw config node: creates it from the type attribute and reads an
+        /// optional admin attribute. The attribute overrides the tool's own default, so which tools
+        /// require an administrator can be tightened or loosened by a config patch on the element.
+        /// </summary>
+        public void AddTool(XmlNode node)
         {
-            _registry.AddTool(tool);
+            var tool = Factory.CreateObject(node, true) as IMcpTool;
+            if (tool == null)
+            {
+                McpLog.Warn("Skipping a tool whose type did not resolve to an IMcpTool.");
+                return;
+            }
+
+            var adminAttribute = XmlUtil.GetAttribute("admin", node);
+            var requiresAdmin = string.IsNullOrEmpty(adminAttribute)
+                ? tool.RequiresAdmin
+                : string.Equals(adminAttribute, "true", StringComparison.OrdinalIgnoreCase);
+
+            _registry.AddTool(tool, requiresAdmin);
         }
 
         /// <summary>Adds a permitted request Origin.</summary>

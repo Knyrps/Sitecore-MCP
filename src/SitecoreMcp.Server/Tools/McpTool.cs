@@ -26,6 +26,9 @@ namespace SitecoreMcp.Server.Tools
         public virtual bool RequiresWrite => false;
 
         /// <inheritdoc />
+        public virtual bool RequiresAdmin => false;
+
+        /// <inheritdoc />
         public Type ArgumentType => typeof(TArgs);
 
         /// <inheritdoc />

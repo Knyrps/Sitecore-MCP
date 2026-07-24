@@ -23,6 +23,11 @@ namespace SitecoreMcp.Server.Tools.Search
         public override string Name => "sitecore_index_status";
 
         /// <inheritdoc />
+        // A dev/ops diagnostic about index internals rather than a content task; waivable via the
+        // admin attribute for an instance that wants content agents to self-diagnose search staleness.
+        public override bool RequiresAdmin => true;
+
+        /// <inheritdoc />
         public override string Description =>
             "Report ContentSearch index status: document count, last updated, field count, and whether " +
             "the index is out of date. Pass a name for one index, or omit to list all.";

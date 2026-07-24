@@ -14,12 +14,17 @@ namespace SitecoreMcp.Server.Tools
     public sealed class RequestToolCatalog : IToolCatalog
     {
         private readonly IReadOnlyDictionary<string, IMcpTool> _tools;
+        private readonly IReadOnlyDictionary<string, bool> _requiresAdmin;
         private readonly McpCallContext _context;
 
-        /// <summary>Creates the catalog over the registered tools and the current call context.</summary>
-        public RequestToolCatalog(IReadOnlyDictionary<string, IMcpTool> tools, McpCallContext context)
+        /// <summary>Creates the catalog over the registered tools, their resolved admin requirements, and the call context.</summary>
+        public RequestToolCatalog(
+            IReadOnlyDictionary<string, IMcpTool> tools,
+            IReadOnlyDictionary<string, bool> requiresAdmin,
+            McpCallContext context)
         {
             _tools = tools;
+            _requiresAdmin = requiresAdmin;
             _context = context;
         }
 
@@ -75,7 +80,28 @@ namespace SitecoreMcp.Server.Tools
             }
         }
 
-        /// <summary>A write tool is invisible to a caller without effective write permission.</summary>
-        private bool IsVisible(IMcpTool tool) => !tool.RequiresWrite || _context.AllowWrites;
+        /// <summary>
+        /// A tool is invisible to a caller that lacks its required write permission or, when it needs
+        /// an administrator, is not running as one. Hidden tools are also refused, so the gate holds
+        /// whether or not the client consults the list first.
+        /// </summary>
+        private bool IsVisible(IMcpTool tool)
+        {
+            if (tool.RequiresWrite && !_context.AllowWrites)
+            {
+                return false;
+            }
+
+            if (RequiresAdmin(tool) && !_context.IsAdministrator)
+            {
+                return false;
+            }
+
+            return true;
+        }
+
+        /// <summary>Whether a tool requires an administrator, as resolved at registration (default plus any config override).</summary>
+        private bool RequiresAdmin(IMcpTool tool) =>
+            _requiresAdmin.TryGetValue(tool.Name, out var requiresAdmin) ? requiresAdmin : tool.RequiresAdmin;
     }
 }

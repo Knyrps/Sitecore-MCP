@@ -12,14 +12,23 @@ namespace SitecoreMcp.Server.Tools
         private readonly Dictionary<string, IMcpTool> _tools =
             new Dictionary<string, IMcpTool>(StringComparer.Ordinal);
 
-        /// <summary>Registers a tool. Called by Sitecore config binding; a duplicate name is rejected.</summary>
-        public void AddTool(IMcpTool tool)
+        // The effective admin requirement per tool name: the tool's own default unless a config
+        // attribute overrode it. Kept beside the tool so the tool object stays immutable.
+        private readonly Dictionary<string, bool> _requiresAdmin =
+            new Dictionary<string, bool>(StringComparer.Ordinal);
+
+        /// <summary>
+        /// Registers a tool with its resolved admin requirement. Called by config binding; a duplicate
+        /// name is rejected.
+        /// </summary>
+        public void AddTool(IMcpTool tool, bool requiresAdmin)
         {
             if (tool == null) throw new ArgumentNullException(nameof(tool));
             if (string.IsNullOrEmpty(tool.Name)) throw new ArgumentException("Tool name is required.", nameof(tool));
             if (_tools.ContainsKey(tool.Name)) throw new ArgumentException($"Duplicate tool name '{tool.Name}'.", nameof(tool));
 
             _tools.Add(tool.Name, tool);
+            _requiresAdmin.Add(tool.Name, requiresAdmin);
         }
 
         /// <summary>All registered tools, regardless of the caller's permissions.</summary>
@@ -27,6 +36,6 @@ namespace SitecoreMcp.Server.Tools
 
         /// <summary>Creates a catalog scoped to one call's context, filtering and executing on its behalf.</summary>
         public RequestToolCatalog CreateCatalog(McpCallContext context) =>
-            new RequestToolCatalog(_tools, context);
+            new RequestToolCatalog(_tools, _requiresAdmin, context);
     }
 }

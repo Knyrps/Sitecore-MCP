@@ -49,6 +49,11 @@ namespace SitecoreMcp.Server.Tools.Templates
         public override bool RequiresWrite => true;
 
         /// <inheritdoc />
+        // Templates define the content schema, which is developer/admin territory rather than a
+        // content-editing task; an operator can waive this via the adminExemptTools config list.
+        public override bool RequiresAdmin => true;
+
+        /// <inheritdoc />
         public override string Description =>
             "Create a new Sitecore template under a parent, with base templates (default: Standard " +
             "Template), sections, and typed fields, and optionally a __Standard Values item. Field " +

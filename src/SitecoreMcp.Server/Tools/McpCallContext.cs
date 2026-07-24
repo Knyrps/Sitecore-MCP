@@ -32,6 +32,9 @@ namespace SitecoreMcp.Server.Tools
         /// <summary>Whether writes are permitted: the client must allow them and so must the global switch.</summary>
         public bool AllowWrites => Client.AllowWrites && Settings.AllowWrites;
 
+        /// <summary>Whether this call runs as a Sitecore administrator, which gates admin-only tools.</summary>
+        public bool IsAdministrator => User != null && User.IsAdministrator;
+
         /// <summary>
         /// Resolves a database by name, defaulting to master when none is given, and rejecting one
         /// outside the client's allow-list or one that does not exist. Throws
