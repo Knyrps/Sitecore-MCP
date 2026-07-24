@@ -39,6 +39,11 @@ semantics (start, return a handle, poll) from the outset rather than blocking th
 - [ ] `sitecore_rebuild_link_database` — **new**, not in the original SPE list. The Link Database is
       what backs `get_item_references`/`get_item_referrers` (§2); if it's stale, those tools return
       wrong answers. Worth having once reference tooling exists.
+- [ ] `sitecore_populate_solr_schema` — **new**, not in the original SPE list. Pushes Sitecore's
+      field definitions into Solr's managed schema (the Control Panel "Populate Solr Managed Schema"
+      operation). Required after adding a computed/indexed field before a rebuild will index it, so it
+      pairs naturally with `rebuild_index`. Applies to one index or all. Note this is a Solr-specific
+      operation — a no-op / clear "not applicable" on a Lucene instance, not an error.
 
 *(Deferred alongside Diagnostics for this planning pass — see the implementation plan.)*
 
@@ -87,7 +92,7 @@ hides the entry while the work keeps running. Both were rejected as worse than n
 
 ---
 
-**Total: ~35 tools** (34 from the original triage, plus `rebuild_link_database`; a `stop_job` was
-added during restructuring and then dropped, see §4b). `Tools/Jobs` §4a and Diagnostics are
+**Total: ~36 tools** (34 from the original triage, plus `rebuild_link_database` and
+`populate_solr_schema`; a `stop_job` was added during restructuring and then dropped, see §4b). `Tools/Jobs` §4a and Diagnostics are
 **deferred** — see [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for the detailed design of
 everything else.
