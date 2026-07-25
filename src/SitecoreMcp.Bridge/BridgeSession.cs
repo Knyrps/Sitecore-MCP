@@ -49,10 +49,25 @@ public sealed class BridgeSession
                 CaptureProtocolVersion(body);
             }
 
-            // A notification never gets a response written, and an empty body has nothing to relay.
-            if (hasId && !string.IsNullOrEmpty(body))
+            // A notification never gets a response written.
+            if (!hasId)
+            {
+                return;
+            }
+
+            // Only relay a valid JSON-RPC message. An error or startup page (e.g. during an
+            // app-domain reload) comes back as HTML, whose newlines would otherwise be split into one
+            // bogus stdout line each and flood the client; surface a single JSON-RPC error instead and
+            // keep the raw detail on stderr.
+            if (LooksLikeJson(body))
             {
                 await WriteLineAsync(body);
+            }
+            else
+            {
+                Console.Error.WriteLine(
+                    $"[sitecore-mcp-bridge] Non-JSON response (HTTP {(int)response.StatusCode}): {Snippet(body)}");
+                await WriteLineAsync(ProtocolError(message, (int)response.StatusCode));
             }
         }
         catch (Exception ex)
@@ -106,21 +121,62 @@ public sealed class BridgeSession
         }
     }
 
-    private static string TransportError(string message)
+    private static string TransportError(string message) =>
+        JsonRpcError(message, "Bridge could not reach the Sitecore endpoint.");
+
+    private static string ProtocolError(string message, int statusCode)
     {
-        var id = "null";
+        var reason = statusCode == 200
+            ? "The Sitecore endpoint returned a non-JSON response."
+            : $"The Sitecore endpoint returned HTTP {statusCode} with a non-JSON body (often an app-domain reload or an error page). Retry shortly.";
+        return JsonRpcError(message, reason);
+    }
+
+    private static string JsonRpcError(string message, string reason)
+    {
+        var id = ExtractId(message);
+        var encodedReason = JsonSerializer.Serialize(reason);
+        return $"{{\"jsonrpc\":\"2.0\",\"id\":{id},\"error\":{{\"code\":-32603,\"message\":{encodedReason}}}}}";
+    }
+
+    private static string ExtractId(string message)
+    {
         try
         {
             using var document = JsonDocument.Parse(message);
             if (document.RootElement.TryGetProperty("id", out var value))
             {
-                id = value.GetRawText();
+                return value.GetRawText();
             }
         }
         catch (JsonException)
         {
         }
 
-        return $"{{\"jsonrpc\":\"2.0\",\"id\":{id},\"error\":{{\"code\":-32603,\"message\":\"Bridge could not reach the Sitecore endpoint.\"}}}}";
+        return "null";
+    }
+
+    private static bool LooksLikeJson(string body)
+    {
+        if (string.IsNullOrWhiteSpace(body))
+        {
+            return false;
+        }
+
+        try
+        {
+            using var _ = JsonDocument.Parse(body);
+            return true;
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    private static string Snippet(string body)
+    {
+        var flattened = body.Replace('\r', ' ').Replace('\n', ' ').Trim();
+        return flattened.Length > 200 ? flattened.Substring(0, 200) + "..." : flattened;
     }
 }
