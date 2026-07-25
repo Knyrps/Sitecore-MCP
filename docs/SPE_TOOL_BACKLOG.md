@@ -27,7 +27,7 @@ rationale, and the deferred/skipped tools.
 
 ## 4. Small companions to existing tools
 
-- [ ] `sitecore_reset_item_fields` — revert fields to standard-values inheritance (`Tools/Items`)
+- [x] `sitecore_reset_item_fields` — revert fields to standard-values inheritance (`Tools/Items`)
 
 ## 4a. `Tools/Jobs` (new) — trigger update jobs
 

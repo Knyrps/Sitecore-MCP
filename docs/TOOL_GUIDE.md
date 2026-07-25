@@ -97,6 +97,12 @@ correct `_name` field.
   it verifies each change actually stuck: a field that reports saved but reads back with its old
   value (dropped by field security, a computed field, or a save handler — e.g. a limited user
   editing `__Display name`) is listed in `notPersisted` with a warning, not a false success.
+- **`reset_item_fields`** — the opposite of `update_item`: it removes an item's *own* values so the
+  fields inherit from the template's standard values again (`update` can only set a value, never
+  un-override). Name the fields, or omit them to reset every locally-set **content** field (standard
+  `__` fields are skipped unless you name them, since a blanket reset of presentation/workflow/security
+  would be a footgun). A named-but-already-inherited field is a benign no-op; a field that reads back
+  with a local value after reset (a save handler re-applied it) is reported in `notPersisted`.
 - **`move_item`** — refuses a destination inside the item's own subtree, or a name collision.
 - **`copy_item`** — copies **field data**, not just structure. A deep copy of a site clones *all* its
   content (hostnames, form IDs, settings). If you want "same skeleton, empty fields", copy is the
