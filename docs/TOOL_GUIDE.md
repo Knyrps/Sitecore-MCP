@@ -11,6 +11,17 @@ here.
   are allowed, and the available databases and languages. It orients an agent and is the fastest way
   to spot a bad deploy or a misconfigured client.
 
+## Membership — users, roles, domains
+
+Security-account tools, **all administrator-only** (hidden from a non-admin client). Names are
+domain-qualified (`sitecore\editor`); a bare name assumes the `sitecore` domain.
+
+- **`get_user`** — by exact name (`identity`) or a name substring (`filter`). Returns identity, admin
+  flag, profile basics, enable/lock state, and roles. **Never returns a password.**
+- **`get_role`** — by `identity` or `filter`; `includeMembers` lists the users and nested roles in it
+  (Sitecore roles nest — e.g. `Author` here contains 14 child roles, no direct users).
+- **`get_domain`** — one domain, or all of them, with user counts.
+
 ## Admin-gated tools
 
 Some tools require an **administrator** client. A tool that needs admin is hidden from `tools/list`

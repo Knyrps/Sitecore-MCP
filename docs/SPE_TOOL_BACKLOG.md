@@ -60,9 +60,9 @@ hides the entry while the work keeps running. Both were rejected as worse than n
 
 ## 5. `Tools/Membership` (new)
 
-- [ ] `sitecore_get_user`
-- [ ] `sitecore_get_domain`
-- [ ] `sitecore_get_role`
+- [x] `sitecore_get_user`
+- [x] `sitecore_get_domain`
+- [x] `sitecore_get_role`
 - [ ] `sitecore_new_user` / `sitecore_remove_user`
 - [ ] `sitecore_enable_user` / `sitecore_disable_user`
 - [ ] `sitecore_unlock_user`
