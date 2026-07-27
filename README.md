@@ -4,8 +4,10 @@ An [MCP](https://modelcontextprotocol.io) server that runs **inside** Sitecore a
 assembly, giving an AI agent 66 tools over the real Kernel API — items, templates, presentation,
 media, search, publishing, security, and workflow — under a real Sitecore user.
 
-**Target:** Sitecore XM/XP 10.x · .NET Framework 4.8 · IIS.
+**Target:** Sitecore XM/XP 10.x · .NET Framework 4.8 · IIS or containers.
 Verified on 10.3 (Kernel 18.0.0.0) and 10.4 (Kernel 19.0.0.0).
+
+> Working on the server itself? See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
 
 ## Why in-process
 
@@ -14,7 +16,7 @@ sit outside the platform and reach in over the network. That means a second runt
 version, an extra hop, a DTO layer that drifts from the real item model, and whatever permission
 model the chosen API happened to expose.
 
-This module is a DLL in the instance's `/bin`. It gets `Sitecore.Data.Database`, `Sitecore.Context`,
+This module is a DLL in your instance's `/bin`. It gets `Sitecore.Data.Database`, `Sitecore.Context`,
 the real security model, and the publishing and indexing pipelines as **in-process calls**. Tools are
 thin wrappers over the Kernel API, so what the agent sees is what Sitecore actually does.
 
@@ -22,23 +24,23 @@ thin wrappers over the Kernel API, so what the agent sees is what Sitecore actua
 
 - **Never report success for something that did not happen.** A field that saves but reads back
   unchanged is returned in `notPersisted`; a template change that drops a value returns it in
-  `dataLost` with the old value; a refused write names the reason and, where useful, the alternatives.
+  `dataLost` with the old value; a refused write names the reason and the alternatives.
 - **Real security, always.** Every call runs as a configured Sitecore user via `UserSwitcher`.
   `SecurityDisabler` is never used, so item and field ACLs, workflow, and auditing apply normally.
 - **Fail loudly on ambiguity.** Write arguments resolve templates, renderings, and layouts by path,
   ID, or *exact* name — never a fuzzy guess that could target the wrong item.
 
-## How it fits together
+## Architecture
 
 ```
 MCP client (Claude Code, Claude Desktop, VS Code, opencode)
       │  stdio JSON-RPC
       ▼
-SitecoreMcp.Bridge          ← optional: only for stdio-only clients, or local instances
+sitecore-mcp-bridge         ← optional: only for stdio-only clients, or instances
       │                       whose self-signed cert Node/Bun runtimes reject
-      │  HTTP POST /sitecore/api/mcp
+      │  HTTPS POST /sitecore/api/mcp   (Authorization: Bearer <key>)
       ▼
-SitecoreMcp.Server (in the Sitecore worker process)
+SitecoreMcp.Server.dll  — in the CM worker process
       │  in-process Kernel API, as the caller's real Sitecore user
       ▼
 Sitecore
@@ -46,20 +48,29 @@ Sitecore
 
 Clients that speak Streamable HTTP connect to the endpoint directly and skip the bridge.
 
-## Getting started
+**Deploy it to Content Management only.** It is an authoring and development surface; CD servers
+should never expose it. The config supports Sitecore's role scoping, so a single patch can enforce
+that across a topology (see [Deploying](#deploying)).
 
-### Prerequisites
+## Requirements
 
-- A **Sitecore XM/XP 10.x** instance on IIS. The server compiles against *that instance's own*
-  assemblies, so 10.3 and 10.4 each need their own build.
-- The **.NET SDK** (builds the net48 server, the net8.0 bridge, and the tests) and the **.NET 8
-  runtime** (to run the bridge).
-- An **elevated PowerShell** for deployment — the web root, app-pool environment, and pool restart
-  are admin-only. (Pass `-SkipAdminRequirement` if your account already holds those rights.)
+| | |
+|---|---|
+| **Sitecore** | XM or XP 10.x, on the CM role |
+| **Runtime** | .NET Framework 4.8 (the instance's own) |
+| **Build-time** | .NET SDK, once, to produce the assembly for your Sitecore version |
+| **Client-side** | .NET 8 runtime only if you use the stdio bridge |
 
-### 1. Point the build at your instance
+The assembly binds to the exact `Sitecore.Kernel` your instance runs, so **10.3 and 10.4 need
+different builds**. Produce one artifact per Sitecore version you target and reuse it across the
+environments running that version.
 
-Create a gitignored `Directory.Build.user.props` at the repo root:
+## Installing
+
+### 1. Produce the artifact
+
+Point the build at any instance running your target Sitecore version — a gitignored
+`Directory.Build.user.props` at the repo root:
 
 ```xml
 <Project>
@@ -69,46 +80,117 @@ Create a gitignored `Directory.Build.user.props` at the repo root:
 </Project>
 ```
 
-### 2. Build and test
-
 ```powershell
-dotnet build -c Release
-dotnet test
+dotnet build src/SitecoreMcp.Server -c Release
 ```
 
-A plain build never writes into the web root — deployment is a separate, opt-in step.
+That produces the two files you ship:
 
-### 3. Deploy (elevated)
-
-```powershell
-./deploy/Deploy-SitecoreMcp.ps1 -WebRoot C:\inetpub\wwwroot\my-instance
+```
+src/SitecoreMcp.Server/bin/Release/SitecoreMcp.Server.dll
+src/SitecoreMcp.Server/App_Config/Include/SitecoreMcp/SitecoreMcp.config
 ```
 
-The script builds the chosen configuration, copies the DLL and `SitecoreMcp.config`, writes a local
-`SitecoreMcp.Dev.config` enabling the endpoint with an admin-mapped client, sets `SITECORE_MCP_KEY`
-on the app pool, verifies the copy by hash, and restarts the pool — printing the generated key. Pass
-`-Key <key>` to pin your own. See [deploy/README.md](deploy/README.md) for the two-client (admin +
-non-admin) variant and the production posture.
+Version the artifact by Sitecore version (e.g. `SitecoreMcp-10.3.zip`) and publish it to wherever
+your team keeps build outputs. This is a one-time step per Sitecore version, not per deployment.
 
-### 4. Verify
+### 2. Deploy through your normal mechanism
 
-```powershell
-./deploy/Verify-SitecoreMcp.ps1 -Url https://my-instance/sitecore/api/mcp -Key <key>
+The module is an ordinary Sitecore extension: **one assembly into `/bin`, one config into
+`App_Config/Include`**. Use whatever already delivers code to your instances.
+
+| Topology | How it lands |
+|---|---|
+| **On-prem / IIS** | Include the two files in your solution's publish output or deployment package, so they deploy with everything else. |
+| **Containers** | Add a `COPY` layer to your **CM** Dockerfile — the assembly to `/bin`, the config to `App_Config/Include/SitecoreMcp/`. |
+| **Azure PaaS** | Ship alongside your CM App Service artifacts. |
+| **Sitecore package** | Wrap both files in a `.zip`/`.update` for the Installation Wizard if that is your convention. |
+
+Nothing is written to the database and no items are installed, so deployment is just file copy and
+rollback is deleting the two files.
+
+### 3. Configure it
+
+The shipped `SitecoreMcp.config` is **safe by default**: the endpoint is disabled, HTTPS is required,
+writes are off, and no clients are defined. A disabled instance registers no route and behaves
+exactly like one without the module.
+
+Enabling is a **separate environment patch** you own — keep it out of the base config so it can
+differ per environment and never leaks to production by accident. Create
+`App_Config/Include/zzz/SitecoreMcp.Environment.config`:
+
+```xml
+<?xml version="1.0" encoding="utf-8"?>
+<configuration xmlns:patch="http://www.sitecore.net/xmlconfig/"
+               xmlns:role="http://www.sitecore.net/xmlconfig/role/">
+  <sitecore role:require="Standalone or ContentManagement">
+
+    <settings>
+      <setting name="Mcp.Enabled">
+        <patch:attribute name="value">true</patch:attribute>
+      </setting>
+      <setting name="Mcp.AllowWrites">
+        <patch:attribute name="value">true</patch:attribute>
+      </setting>
+    </settings>
+
+    <sitecoreMcp>
+      <clients>
+        <!-- One client per person or purpose. The key lives in an environment
+             variable named here - never in this file. -->
+        <client id="alice"
+                keyEnvVar="SITECORE_MCP_KEY_ALICE"
+                user="sitecore\svc-mcp-alice"
+                allowWrites="true"
+                databases="master" />
+      </clients>
+    </sitecoreMcp>
+
+  </sitecore>
+</configuration>
 ```
 
-Expect an `initialize` result, the tool list, and a `sitecore_get_context` payload. Then check
-`App_Data/logs/mcp.log.<date>.txt` for an `AUDIT` line — every call is logged there, separate from
-the main Sitecore log.
+`role:require` means the same patch can ship everywhere and only activate on CM.
 
-## Client configuration
+### 4. Set the keys
+
+A key is any high-entropy secret (64 hex characters is a reasonable default). It is read from the
+named environment variable **at application start** — never from config, so it stays out of source
+control.
+
+| Host | Where the variable goes |
+|---|---|
+| **IIS** | App-pool *environment variables* (`applicationHost.config`). Requires a full worker restart — a recycle does not re-read the process environment. |
+| **Containers** | Compose `environment:` / Kubernetes secret mounted as an env var. |
+| **Azure App Service** | Application settings. |
+
+A client whose variable is unset is silently disabled, which is the intended fail-closed behaviour.
+
+### 5. Verify
+
+Any HTTP client works — no tooling from this repo is needed:
+
+```bash
+curl -sS https://cm.example.com/sitecore/api/mcp \
+  -H "Authorization: Bearer $SITECORE_MCP_KEY" \
+  -H "Content-Type: application/json" \
+  -H "MCP-Protocol-Version: 2025-06-18" \
+  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"sitecore_get_context","arguments":{}}}'
+```
+
+A healthy response reports the instance, the resolved user, whether writes are allowed, and the
+permitted databases — confirming authentication, identity mapping, and permissions in one call.
+Then check `App_Data/logs/mcp.log.<date>.txt` for the matching `AUDIT` line.
+
+## Connecting a client
 
 **Direct HTTP** — any client speaking Streamable HTTP points at
-`https://my-instance/sitecore/api/mcp` with an `Authorization: Bearer <key>` header. Best where the
-instance has a trusted certificate.
+`https://cm.example.com/sitecore/api/mcp` with an `Authorization: Bearer <key>` header. Preferred
+wherever the instance has a trusted certificate.
 
-**stdio bridge (recommended locally)** — local instances use a self-signed certificate that Node/Bun
-clients reject. The bridge is a .NET process whose `HttpClient` trusts the Windows certificate store,
-so it connects with no cert wrangling:
+**stdio bridge** — for stdio-only clients, or local instances whose self-signed certificate Node/Bun
+runtimes reject. The bridge is a small .NET process whose `HttpClient` trusts the Windows certificate
+store, so it connects with no cert wrangling:
 
 ```powershell
 dotnet publish src/SitecoreMcp.Bridge -c Release
@@ -116,7 +198,7 @@ dotnet publish src/SitecoreMcp.Bridge -c Release
 ```
 
 <details>
-<summary><b>Claude Code / Claude Desktop</b> (<code>claude_desktop_config.json</code>)</summary>
+<summary><b>Claude Code / Claude Desktop</b></summary>
 
 ```json
 {
@@ -124,7 +206,7 @@ dotnet publish src/SitecoreMcp.Bridge -c Release
     "sitecore": {
       "command": "C:\\path\\to\\sitecore-mcp-bridge.exe",
       "env": {
-        "SITECORE_MCP_URL": "https://my-instance/sitecore/api/mcp",
+        "SITECORE_MCP_URL": "https://cm.example.com/sitecore/api/mcp",
         "SITECORE_MCP_KEY": "<key>"
       }
     }
@@ -143,7 +225,7 @@ dotnet publish src/SitecoreMcp.Bridge -c Release
       "type": "stdio",
       "command": "C:\\path\\to\\sitecore-mcp-bridge.exe",
       "env": {
-        "SITECORE_MCP_URL": "https://my-instance/sitecore/api/mcp",
+        "SITECORE_MCP_URL": "https://cm.example.com/sitecore/api/mcp",
         "SITECORE_MCP_KEY": "<key>"
       }
     }
@@ -163,7 +245,7 @@ dotnet publish src/SitecoreMcp.Bridge -c Release
       "type": "local",
       "command": ["C:\\path\\to\\sitecore-mcp-bridge.exe"],
       "environment": {
-        "SITECORE_MCP_URL": "https://my-instance/sitecore/api/mcp",
+        "SITECORE_MCP_URL": "https://cm.example.com/sitecore/api/mcp",
         "SITECORE_MCP_KEY": "{file:./.sitecore-mcp-key}"
       },
       "enabled": true
@@ -173,30 +255,80 @@ dotnet publish src/SitecoreMcp.Bridge -c Release
 ```
 </details>
 
-Keep the key out of committed config — use an environment variable or a gitignored file (as in the
-opencode example, with `.sitecore-mcp-key` in `.gitignore`).
+Keep keys out of committed config — use an environment variable or a gitignored file (as above, with
+`.sitecore-mcp-key` in `.gitignore`).
 
 > Connecting a Node/Bun client **directly** over HTTPS to a self-signed instance requires trusting
 > the cert (`NODE_EXTRA_CA_CERTS` plus a full client restart). The bridge avoids this entirely.
 
-## Security model
+## Operating it
 
-The endpoint is **disabled by default** and every layer is opt-in.
+### Recommended posture per environment
+
+| Environment | Enabled | Writes | Client | Notes |
+|---|---|---|---|---|
+| **Local dev** | Yes | Yes | Admin user is fine | `Mcp.RequireHttps=false` and `Mcp.VerboseErrors=true` are reasonable locally. |
+| **Shared dev / QA** | Yes | Yes | One limited user **per developer** | Per-person keys make the audit log meaningful. Scope `databases` to `master`. |
+| **Staging / UAT** | Read-only, or off | No | Limited | Enable only if agents genuinely need it there. |
+| **Production** | **Off** | — | — | Leave `Mcp.Enabled=false`. If a read-only case is unavoidable, pair it with an address allow-list and a user restricted to the branches it needs. |
+
+### Designing clients
+
+A client is a key, a Sitecore user, and its limits. Two decisions matter:
+
+- **One client per person, not one per team.** The audit log records the mapped user, so shared keys
+  cost you attribution — the main thing you want when an agent changes content.
+- **Grant the Sitecore user, not the client.** Permissions come from the mapped user's roles and item
+  ACLs, so scope the *user* to the branches it should touch. `allowWrites` and `databases` are a
+  second, coarser fence on top.
+
+Each `<client>` needs a unique `id` attribute — Sitecore's config merge collapses sibling elements
+without one, and only the last would survive.
+
+### Security model
 
 | Layer | Behaviour |
 |---|---|
-| **Enablement** | `Mcp.Enabled` is `false` in the base config. A disabled instance registers no route. |
-| **Authentication** | An API key (from an app-pool environment variable, never config) maps to one Sitecore user. Keys are compared in constant time and rate-limited. |
+| **Enablement** | `Mcp.Enabled` is `false` in the base config; no route is registered when off. |
+| **Authentication** | A key from an environment variable maps to one Sitecore user. Compared in constant time, rate-limited (30 burst, 1/sec refill by default). |
 | **Identity** | Calls run as that user via `UserSwitcher`. Item/field ACLs, workflow, and auditing apply. `SecurityDisabler` is never used. |
-| **Writes** | Off globally by default *and* per client. Write tools are hidden from `tools/list` when either switch is off. |
+| **Writes** | Off globally *and* per client by default. Write tools are hidden from `tools/list` when either switch is off. |
 | **Databases** | Allow-listed per client. A `master`-only client cannot read `core` or publish to `web`. |
 | **Admin gate** | Schema, security, and dev/ops tools require an administrator client and are hidden from others. Config can **add** an admin requirement (`admin="true"` on a `<tool>`) but never remove one, so a config mistake cannot expose a privileged tool. |
 | **Transport** | HTTPS required by default, plus Origin, client-address, body-size, and media-type gates. |
-| **Audit** | Every call is logged to `mcp.log` (user, tool, target, status, duration). |
+| **Audit** | Every call is logged to `mcp.log` — user, tool, target, status, duration — separate from the main Sitecore log. |
 
-Two clients on the same instance can hold different keys, users, and permissions — an admin client
-for developers and a limited one for content agents. Locally the mapped user may be an admin; on a
-shared instance it should not be.
+### Settings reference
+
+All under `<sitecore><settings>`; patch what you need per environment.
+
+| Setting | Default | Purpose |
+|---|---|---|
+| `Mcp.Enabled` | `false` | Master switch. Off means no route at all. |
+| `Mcp.EndpointPath` | `sitecore/api/mcp` | Route the endpoint serves on. |
+| `Mcp.RequireHttps` | `true` | Reject non-HTTPS requests. Turn off only locally. |
+| `Mcp.AllowWrites` | `false` | Global write switch, ANDed with each client's `allowWrites`. |
+| `Mcp.MaxRequestBytes` | `1048576` | Request body cap — also the practical ceiling on media uploads. |
+| `Mcp.MaxConcurrentCalls` | `4` | Tool calls executed concurrently before shedding. |
+| `Mcp.MaxFieldLength` | `2000` | Field values are truncated beyond this in output. |
+| `Mcp.VerboseErrors` | `false` | Full error detail in responses. Development only. |
+| `Mcp.RateLimit.Capacity` | `30` | Burst size per client. |
+| `Mcp.RateLimit.RefillPerSecond` | `1` | Sustained request rate per client. |
+| `Mcp.ServerName` | `SitecoreMcp` | Name reported at `initialize`. Worth setting per environment if a client connects to several. |
+| `Mcp.ServerVersion` | `0.1.0` | Version reported at `initialize`. |
+
+Also available: `<allowedOrigins>`, `<allowedAddresses>` (defaults to localhost — widen it for a
+shared instance), and `<trustedProxies>` for `X-Forwarded-For` handling.
+
+### Troubleshooting
+
+| Symptom | Cause |
+|---|---|
+| `401` for a key that should work | The worker has not re-read its environment. App-pool env vars need a full stop/start, not a recycle. |
+| Only one client works | Each `<client>` needs a unique `id`; without one the config merge collapses them. |
+| Tool missing from `tools/list` | It is write-gated (check `Mcp.AllowWrites` and the client's `allowWrites`) or admin-gated (the mapped user is not an administrator). |
+| Endpoint returns HTML | The app domain is restarting, or the route is not registered — check the Sitecore log for an initialize-pipeline error. |
+| `Rate limit exceeded` | Expected under scripted bursts; raise `Mcp.RateLimit.*` or pace the calls. |
 
 ## Tools
 
@@ -286,6 +418,8 @@ with `finalLayout: false` for the shared base.
 | Tool | Purpose |
 |---|---|
 | `sitecore_upload_media` | Upload a file from base64 into the media library; the extension decides the media type. Returns the item and its `mediaUrl`. |
+
+Bounded by `Mcp.MaxRequestBytes` — suited to icons and documents, not video.
 </details>
 
 <details>
@@ -355,28 +489,6 @@ Setting a user's password is deliberately **not** offered.
 Fuller usage notes — the sharp edges, which tool to reach for, and how results are shaped — are in
 [docs/TOOL_GUIDE.md](docs/TOOL_GUIDE.md). A condensed version ships as the server `instructions`, so
 compliant clients give the model that guidance automatically.
-
-## Repository layout
-
-| Path | Role |
-|---|---|
-| `src/SitecoreMcp.Server` | The module deployed to the instance: protocol, transport, tools. |
-| `src/SitecoreMcp.Bridge` | stdio-to-HTTP shim for stdio-only clients. |
-| `tests/SitecoreMcp.Server.Tests` | Unit tests for the parts needing no running Sitecore. |
-| `deploy/` | Deployment and verification scripts. |
-| `docs/` | Tool guide, adaptation plan, and implementation notes. |
-
-## Design notes
-
-- **Hand-rolled protocol.** The official `ModelContextProtocol` NuGet targets net8.0/netstandard2.0
-  and drags in a `System.Text.Json` / `Microsoft.Extensions.*` graph that collides with Sitecore's
-  binding redirects. The surface actually needed is about five methods.
-- **Stateless.** No session IDs, so app-pool recycles cost nothing.
-- **Synchronous.** Every Kernel API is sync; async-over-sync in classic ASP.NET invites
-  `SynchronizationContext` deadlocks.
-- **Responses are JSON, never SSE** — permitted by the spec, and it avoids IIS response-buffering pain.
-- **Tools are registered through config**, not compiled in, so a solution can add its own without
-  recompiling this assembly.
 
 ## License
 
