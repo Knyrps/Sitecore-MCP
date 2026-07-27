@@ -71,9 +71,10 @@ namespace SitecoreMcp.Server.Tools.Search
             {
                 // Summary is marked obsolete but remains the standard, sufficient source of these
                 // stats; the suggested replacements add a lot of surface for no extra value here.
-#pragma warning disable CS0618
+                // CS0619 too: a later Kernel may escalate the same member to an error-level obsolete.
+#pragma warning disable CS0618, CS0619
                 var summary = index.Summary;
-#pragma warning restore CS0618
+#pragma warning restore CS0618, CS0619
                 result["documents"] = summary.NumberOfDocuments;
                 result["fields"] = summary.NumberOfFields;
                 result["lastUpdated"] = summary.LastUpdated.ToString("o");

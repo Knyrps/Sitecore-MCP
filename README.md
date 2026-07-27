@@ -5,7 +5,8 @@ assembly, giving an AI agent 66 tools over the real Kernel API — items, templa
 media, search, publishing, security, and workflow — under a real Sitecore user.
 
 **Target:** Sitecore XM/XP 10.x · .NET Framework 4.8 · IIS or containers.
-Verified on 10.3 (Kernel 18.0.0.0) and 10.4 (Kernel 19.0.0.0).
+Developed and continuously verified against 10.3 (Kernel 18.0.0.0); builds against 10.4
+(Kernel 19.0.0.0), which needs its own build — see [Installing](#installing).
 
 > Working on the server itself? See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
 

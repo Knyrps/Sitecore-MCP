@@ -98,11 +98,12 @@ namespace SitecoreMcp.Server.Tools.Items
                 return McpToolResult.Failure($"'{destination}' already exists. Pass overwrite=true to replace it.");
             }
 
+            // FileBased is deliberately not set: it defaults to false (blob storage), and Sitecore
+            // 10.4 deprecates the property, so assigning it breaks the build against Kernel 19.
             var options = new MediaCreatorOptions
             {
                 Database = db,
                 Destination = destination,
-                FileBased = false,
                 IncludeExtensionInItemName = false,
                 Versioned = false,
                 OverwriteExisting = overwrite,

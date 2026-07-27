@@ -161,6 +161,20 @@ Two habits that repeatedly caught real bugs:
 
 The endpoint rate-limits by default (30 burst, 1/sec refill), so pace scripted test bursts.
 
+### Cross-version API obsolescence
+
+The build binds to whichever Kernel your `Directory.Build.user.props` points at, so a build that is
+clean on 10.3 can still fail on 10.4 where an API has since been deprecated — that is exactly how
+`MediaCreatorOptions.FileBased` shipped broken. When adding Kernel API usage:
+
+- **Prefer not setting a property whose value equals its default** — that alone avoided the
+  `FileBased` breakage, since the property was redundant.
+- **Suppress with both codes** when an obsolete member is genuinely the right call:
+  `#pragma warning disable CS0618, CS0619` — a later Kernel can escalate a warning-level obsolete to
+  an error-level one.
+- **Build against every supported version before releasing.** There is no substitute; only the
+  compiler bound to that Kernel can tell you.
+
 ## Design notes
 
 - **Hand-rolled protocol.** The official `ModelContextProtocol` NuGet targets net8.0/netstandard2.0
