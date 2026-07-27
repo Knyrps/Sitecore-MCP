@@ -33,6 +33,15 @@ Writes (also admin-only; a write client):
   show in `get_role`/`get_user` — that's Sitecore's behaviour, not a failed write.
 - **`new_domain`** / **`remove_domain`** (refuses the built-in `sitecore`/`extranet`/`default`).
 
+Item access rules (admin-only; they govern item security):
+- **`test_item_acl`** — does a user/role have a right (read/write/delete/…) on an item, after
+  inheritance and denies. Answers "why can't account X edit this?".
+- **`add_item_acl`** — append an allow/deny rule (right, account, propagation: entity/descendants/any).
+- **`set_item_acl`** — replace the rule for one account+right (so allow→deny cleanly, no stacking).
+- **`clear_item_acl`** — remove all local rules, or just one account's, reverting to inherited security.
+- *Edge case:* the virtual `Everyone` role does not round-trip into per-item rules like a concrete
+  user/role — name specific accounts.
+
 ## Admin-gated tools
 
 Some tools require an **administrator** client. A tool that needs admin is hidden from `tools/list`
