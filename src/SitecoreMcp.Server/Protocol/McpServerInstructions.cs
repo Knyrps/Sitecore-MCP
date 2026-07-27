@@ -31,7 +31,7 @@ References: sitecore_get_item_referrers lists what points AT an item - run it be
 
 Publishing: content written to master is NOT live until published. sitecore_publish_item publishes an item (optionally deep, optionally related items) to the configured targets; it starts a background job and returns a handle immediately, so poll sitecore_get_jobs with that handle rather than assuming it finished. Publish targets obey the client's permitted databases, so a master-only client cannot publish to web. A running publish cannot be cancelled - Sitecore offers no safe way to stop one - so scope a publish narrowly (a specific path, deep only when needed) rather than starting a large one you may want to stop.
 
-Membership (administrator clients only; all hidden from a non-admin client): sitecore_get_user, sitecore_get_role, sitecore_get_domain read security accounts by exact name (identity) or a name substring (filter). Passwords are never returned.
+Membership (administrator clients only; all hidden from a non-admin client): read with sitecore_get_user/get_role/get_domain (by exact identity or a name substring filter; passwords never returned). Write with new_user/remove_user, enable_user/disable_user, unlock_user, new_role/remove_role, add_role_member/remove_role_member (member may be a user OR a role - roles nest), new_domain/remove_domain. Built-in accounts and domains are protected from deletion.
 
 Prefer typed filters (name, template, date ranges) over raw fieldEquals, which needs exact indexed field names (e.g. _name, not name) and silently matches nothing when wrong.";
     }

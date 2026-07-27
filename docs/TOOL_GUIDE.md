@@ -22,6 +22,17 @@ domain-qualified (`sitecore\editor`); a bare name assumes the `sitecore` domain.
   (Sitecore roles nest — e.g. `Author` here contains 14 child roles, no direct users).
 - **`get_domain`** — one domain, or all of them, with user counts.
 
+Writes (also admin-only; a write client):
+- **`new_user`** (name + password, optional email/full-name/admin) / **`remove_user`** (refuses the
+  built-in administrator and the client's own user).
+- **`enable_user`** / **`disable_user`** (membership approval) / **`unlock_user`** (clears a
+  failed-login lockout — the membership lockout, not an item lock).
+- **`new_role`** / **`remove_role`** (removing a role detaches its members; it does not delete them).
+- **`add_role_member`** / **`remove_role_member`** — the member may be a **user or a role** (Sitecore
+  roles nest). An administrator user is implicitly in every role, so its explicit membership may not
+  show in `get_role`/`get_user` — that's Sitecore's behaviour, not a failed write.
+- **`new_domain`** / **`remove_domain`** (refuses the built-in `sitecore`/`extranet`/`default`).
+
 ## Admin-gated tools
 
 Some tools require an **administrator** client. A tool that needs admin is hidden from `tools/list`

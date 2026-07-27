@@ -63,12 +63,12 @@ hides the entry while the work keeps running. Both were rejected as worse than n
 - [x] `sitecore_get_user`
 - [x] `sitecore_get_domain`
 - [x] `sitecore_get_role`
-- [ ] `sitecore_new_user` / `sitecore_remove_user`
-- [ ] `sitecore_enable_user` / `sitecore_disable_user`
-- [ ] `sitecore_unlock_user`
-- [ ] `sitecore_new_domain` / `sitecore_remove_domain`
-- [ ] `sitecore_new_role` / `sitecore_remove_role`
-- [ ] `sitecore_add_role_member` / `sitecore_remove_role_member`
+- [x] `sitecore_new_user` / `sitecore_remove_user`
+- [x] `sitecore_enable_user` / `sitecore_disable_user`
+- [x] `sitecore_unlock_user`
+- [x] `sitecore_new_domain` / `sitecore_remove_domain`
+- [x] `sitecore_new_role` / `sitecore_remove_role`
+- [x] `sitecore_add_role_member` / `sitecore_remove_role_member`
 - [ ] `sitecore_set_user_password` — **flagged sensitive**, needs its own review pass before shipping
 - [ ] `sitecore_test_item_acl`
 - [ ] `sitecore_add_item_acl` / `sitecore_set_item_acl` / `sitecore_clear_item_acl`
