@@ -155,17 +155,111 @@ differ per environment and never leaks to production by accident. Create
 
 ### 4. Set the keys
 
-A key is any high-entropy secret (64 hex characters is a reasonable default). It is read from the
-named environment variable **at application start** — never from config, so it stays out of source
-control.
+A key is any high-entropy secret. It is read from the environment variable named by the client's
+`keyEnvVar` **at application start** — never from config, so it stays out of source control.
 
-| Host | Where the variable goes |
-|---|---|
-| **IIS** | App-pool *environment variables* (`applicationHost.config`). Requires a full worker restart — a recycle does not re-read the process environment. |
-| **Containers** | Compose `environment:` / Kubernetes secret mounted as an env var. |
-| **Azure App Service** | Application settings. |
+Generate one per client:
 
-A client whose variable is unset is silently disabled, which is the intended fail-closed behaviour.
+```powershell
+# 64 hex characters
+-join ((1..32 | ForEach-Object { '{0:x2}' -f (Get-Random -Max 256) }))
+```
+
+<details>
+<summary><b>IIS</b> — app-pool environment variables</summary>
+
+Set it on the **app pool**, so it is scoped to the worker process rather than the whole machine.
+Use the `WebAdministration` cmdlets — `appcmd`'s nested-collection syntax silently no-ops on an
+existing entry:
+
+```powershell
+Import-Module WebAdministration
+$pool = 'my-site'
+$col  = "system.applicationHost/applicationPools/add[@name='$pool']/environmentVariables"
+
+Add-WebConfigurationProperty -pspath 'MACHINE/WEBROOT/APPHOST' -filter $col -name '.' `
+  -value @{ name = 'SITECORE_MCP_KEY_ALICE'; value = '<key>' }
+```
+
+Then **fully restart the pool** — a recycle does not re-read the process environment:
+
+```powershell
+Stop-WebAppPool  -Name $pool
+Start-WebAppPool -Name $pool
+```
+
+Read it back to confirm:
+
+```powershell
+Get-WebConfiguration -pspath 'MACHINE/WEBROOT/APPHOST' -filter "$col/add" |
+  Select-Object name, value
+```
+</details>
+
+<details>
+<summary><b>Docker Compose</b></summary>
+
+Keep the value in an `.env` file (gitignored) and reference it, so it never enters the compose file:
+
+```yaml
+services:
+  cm:
+    environment:
+      SITECORE_MCP_KEY_ALICE: ${SITECORE_MCP_KEY_ALICE}
+```
+
+```ini
+# .env  (gitignored)
+SITECORE_MCP_KEY_ALICE=<key>
+```
+</details>
+
+<details>
+<summary><b>Kubernetes</b> — secret into the CM pod</summary>
+
+```bash
+kubectl create secret generic sitecore-mcp-keys \
+  --from-literal=alice='<key>'
+```
+
+```yaml
+# CM deployment
+spec:
+  containers:
+    - name: cm
+      env:
+        - name: SITECORE_MCP_KEY_ALICE
+          valueFrom:
+            secretKeyRef:
+              name: sitecore-mcp-keys
+              key: alice
+```
+</details>
+
+<details>
+<summary><b>Azure App Service</b> — application setting</summary>
+
+App settings surface to the process as environment variables:
+
+```bash
+az webapp config appsettings set \
+  --resource-group my-rg --name my-cm-app \
+  --settings SITECORE_MCP_KEY_ALICE='<key>'
+```
+
+For a shared vault, reference Key Vault instead of storing the literal:
+
+```bash
+az webapp config appsettings set \
+  --resource-group my-rg --name my-cm-app \
+  --settings SITECORE_MCP_KEY_ALICE='@Microsoft.KeyVault(SecretUri=https://my-vault.vault.azure.net/secrets/mcp-alice/)'
+```
+
+Setting an app setting restarts the app, so the new value is picked up automatically.
+</details>
+
+A client whose variable is unset is **silently disabled** — the intended fail-closed behaviour, and
+the first thing to check if a key returns `401`.
 
 ### 5. Verify
 
@@ -364,7 +458,7 @@ Rule of thumb: **search** = metadata and indexed content (cheap), **grep** = raw
 </details>
 
 <details>
-<summary><b>Items — writing</b> (12)</summary>
+<summary><b>Items — writing</b> (14)</summary>
 
 | Tool | Purpose |
 |---|---|
@@ -458,7 +552,7 @@ cancelled — Sitecore offers no safe way — so scope publishes narrowly.
 </details>
 
 <details>
-<summary><b>Security &amp; membership</b> (17, all admin-only)</summary>
+<summary><b>Security &amp; membership</b> (18, all admin-only)</summary>
 
 | Tool | Purpose |
 |---|---|
