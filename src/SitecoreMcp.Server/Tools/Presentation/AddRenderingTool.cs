@@ -26,6 +26,10 @@ namespace SitecoreMcp.Server.Tools.Presentation
         [McpParam(Description = "Rendering parameters as a name/value map. Optional.")]
         public Dictionary<string, string> Parameters { get; set; }
 
+        /// <summary>The 1-based position among the device's renderings; appended when omitted.</summary>
+        [McpParam(Description = "1-based position among the device's renderings (rendering order matters within a placeholder). Appends when omitted.")]
+        public int? Index { get; set; }
+
         /// <summary>The device to add the rendering to; defaults to "Default".</summary>
         [McpParam(Description = "Device name. Defaults to Default.")]
         public string Device { get; set; }
@@ -74,7 +78,15 @@ namespace SitecoreMcp.Server.Tools.Presentation
             LayoutEditor.Edit(item, finalLayout, layout =>
             {
                 var device = LayoutEditor.GetOrCreateDevice(layout, deviceItem);
-                device.AddRendering(definition);
+                if (args.Index.HasValue)
+                {
+                    var position = System.Math.Max(0, System.Math.Min(device.Renderings.Count, args.Index.Value - 1));
+                    device.Renderings.Insert(position, definition);
+                }
+                else
+                {
+                    device.AddRendering(definition);
+                }
             });
 
             var added = PresentationDescriber.Rendering(definition, item.Database);

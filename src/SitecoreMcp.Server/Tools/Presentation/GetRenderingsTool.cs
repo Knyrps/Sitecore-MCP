@@ -46,11 +46,25 @@ namespace SitecoreMcp.Server.Tools.Presentation
 
             var renderings = PresentationDescriber.Renderings(device, item.Database);
 
+            // The device's outer layout, resolved so set_layout changes are visible here.
+            JToken layoutInfo = null;
+            if (!string.IsNullOrEmpty(device?.Layout) && Sitecore.Data.ID.IsID(device.Layout))
+            {
+                var layoutItem = item.Database.GetItem(Sitecore.Data.ID.Parse(device.Layout));
+                layoutInfo = layoutItem == null ? (JToken)device.Layout : new JObject
+                {
+                    ["id"] = layoutItem.ID.ToString(),
+                    ["name"] = layoutItem.Name,
+                    ["path"] = layoutItem.Paths.FullPath
+                };
+            }
+
             var result = new JObject
             {
                 ["item"] = item.Paths.FullPath,
                 ["device"] = deviceItem.Name,
                 ["finalLayout"] = finalLayout,
+                ["layout"] = layoutInfo,
                 ["count"] = renderings.Count,
                 ["renderings"] = renderings
             };

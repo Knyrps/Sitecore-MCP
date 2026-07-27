@@ -174,6 +174,12 @@ never the raw field.
 - **`switch_rendering`** — swap the component in place, keeping placeholder/datasource/parameters/
   position and the same unique ID. Atomic — never leaves the placeholder empty the way remove+add can.
 - **`remove_rendering`** — drop an instance by unique ID.
+- **`move_rendering`** — reposition an instance in the device's rendering order (1-based `position` —
+  the order `get_renderings` lists, which is render order within a placeholder). `add_rendering` also
+  takes an optional `index` to insert rather than append.
+- **`set_layout`** — assign which **layout** (the outer view) a device uses, by path/ID/exact name
+  under `/sitecore/layout/Layouts`; empty string clears it. `get_renderings` reports the device's
+  current layout. Distinct from the renderings placed *into* the layout's placeholders.
 - **`reset_layout`** — revert the layout field to standard-values inheritance. A no-op on an item with
   no local layout is reported as `reset: false`, not an error.
 
@@ -187,6 +193,14 @@ never the raw field.
   empty final layout does not imply "nothing to change".
 - **Rendering references are exact-only on writes** (path, ID, or exact name), same as template
   writes — a name like `Container` is far from unique, so a fuzzy match could place the wrong component.
+
+## Media
+
+- **`upload_media`** — upload a file into the media library from base64 content; the extension in
+  `fileName` decides the media type (Image/File/Pdf/…), `alt` sets alternate text, and an existing
+  sibling fails unless `overwrite: true`. The endpoint's request-size limit applies (default ~1 MB
+  body ≈ 700 KB of file), so this suits icons and documents, not videos. The result includes the
+  `mediaUrl`. Reference the uploaded item from image/link fields via its ID or path.
 
 ## References — what breaks if I change this?
 

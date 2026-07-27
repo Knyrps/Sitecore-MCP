@@ -96,3 +96,11 @@ hides the entry while the work keeps running. Both were rejected as worse than n
 `populate_solr_schema`; a `stop_job` was added during restructuring and then dropped, see §4b). `Tools/Jobs` §4a and Diagnostics are
 **deferred** — see [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) for the detailed design of
 everything else.
+
+## Post-plan additions (identified in the coverage evaluation)
+
+- [x] `sitecore_upload_media` — the one genuine gap the SPE export never covered: media upload from
+      base64, with type detection by extension, alt text, and overwrite control.
+- [x] `sitecore_move_rendering` + an `index` argument on `add_rendering` — rendering order within a
+      placeholder.
+- [x] `sitecore_set_layout` — which layout a device uses (get_renderings now reports it).
