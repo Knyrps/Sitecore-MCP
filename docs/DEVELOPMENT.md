@@ -144,6 +144,27 @@ Two things the bridge must get right:
 - **Use the shared helpers** — `ItemResolver`, `ItemEditor`, `ItemProjector`, `Paging`, and the
   per-concern resolvers/describers — rather than re-deriving their behaviour.
 
+## Test coverage
+
+`dotnet test` runs 529 cases. Most are per-tool: every tool is discovered by reflection and fed
+through the contract theories, so each one appears as its own test result.
+
+| Suite | Covers |
+|---|---|
+| `Tools/ToolContractTests` | Per tool: name shape, description length, argument POCO is constructible, generated schema is a lenient object schema, `[McpParam(Required)]` matches the schema's `required` array, every argument carries a description. |
+| `Tools/ToolPermissionTests` | The admin-gated and write sets, written out in full, plus the rule that an admin tool says so in its description. |
+| `Tools/ToolRegistrationTests` | Config and code agree: nothing unregistered, nothing registered that does not exist, no duplicates. |
+| `Protocol/`, `Schema/`, `Transport/` | JSON-RPC envelope, version negotiation, dispatch, schema generation, gates, rate limiting, constant-time key comparison. |
+
+The permission sets are deliberately spelled out rather than derived. They are security decisions, so
+removing a gate should fail a test instead of passing quietly.
+
+**What these tests cannot cover.** `Sitecore.Kernel` is not loadable in the test host, so no tool's
+`Execute` runs here and `McpCallContext` cannot be constructed. Gate *enforcement* is a single shared
+path in `RequestToolCatalog`, verified against a live instance; the per-tool unit tests pin the
+declarations that feed it. Everything touching items, search, publishing, or security is verified on
+a real instance as described below.
+
 ## Verifying against a real instance
 
 The unit tests cover the Sitecore-independent parts (protocol, schema generation, gates, paging).

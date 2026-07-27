@@ -30,7 +30,8 @@ namespace SitecoreMcp.Server.Tools.Search
         /// <inheritdoc />
         public override string Description =>
             "Report ContentSearch index status: document count, last updated, field count, and whether " +
-            "the index is out of date. Pass a name for one index, or omit to list all.";
+            "the index is out of date. Pass a name for one index, or omit to list all. " +
+            "Administrator only.";
 
         /// <inheritdoc />
         protected override McpToolResult Execute(IndexStatusArgs args, McpCallContext context)

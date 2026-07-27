@@ -58,7 +58,8 @@ namespace SitecoreMcp.Server.Tools.Templates
             "Create a new Sitecore template under a parent, with base templates (default: Standard " +
             "Template), sections, and typed fields, and optionally a __Standard Values item. Field " +
             "types must be exact (e.g. Single-Line Text). Fails if the name is invalid, a sibling of " +
-            "that name exists, a field type is unknown, or a section or field name is duplicated.";
+            "that name exists, a field type is unknown, or a section or field name is duplicated. " +
+            "Administrator only.";
 
         /// <inheritdoc />
         protected override McpToolResult Execute(CreateTemplateArgs args, McpCallContext context)
