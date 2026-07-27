@@ -15,7 +15,7 @@ Sitecore Kernel APIs it wraps, behavior, safety/edge cases, and result shape.
 | Tier 4 — `reset_item_fields` | **Done** |
 | Tier 5 — Membership (reads, user/role/domain lifecycle, item ACLs, lock/protect) | **Done** — `set_user_password` dropped by decision |
 | Tier 6 — workflow, `change_item_template`, base templates, item versions, `query_items` | **Done** |
-| §4a trigger update jobs + Diagnostics | **Deferred** |
+| §4a trigger update jobs + Diagnostics | **Done** |
 
 Everything marked Done shipped with live verification on the knh instance; per-tool notes and any
 deviations from this spec are recorded in the corresponding commit messages and

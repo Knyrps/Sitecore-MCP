@@ -271,6 +271,20 @@ authoring database only — `sitecore_publish_item` is what pushes an item to th
   connection, or a stranded lock. Prefer a narrow path and `deep: false` over starting a large publish
   you may regret.
 
+## Dev/ops — indexes, link database, logs (all admin-only)
+
+- **`rebuild_index`** — `name` fully rebuilds one index (background job, poll `get_jobs` — a ~10k-item
+  tree takes ~30s here); `rootPath` refreshes just a subtree in every index covering it, which is the
+  cheap option after editing a branch. Check `index_status` afterwards.
+- **`populate_solr_schema`** — the Control Panel "Populate Solr Managed Schema" operation, per index
+  or all. Run it after adding indexed/computed fields **before** a rebuild — a rebuild can't index a
+  field the schema doesn't know. Reports `notApplicable` on a non-Solr instance.
+- **`rebuild_link_database`** — rebuilds the reference store behind
+  `get_item_references`/`referrers`; run when reference results look stale. Background job.
+- **`get_logs`** — list the log files, or tail one (`file` is a name or prefix — `'log'`, `'mcp.log'`,
+  `'Crawling'` — picking the most recent match) filtered by `level`/`search`. Only the final 1 MB is
+  scanned. This reads Sitecore's own logs; the MCP audit trail is `mcp.log`.
+
 ## Search — the full query surface
 
 `sitecore_search` combines any of: `name` / `nameContains`, `text`, `template`, `rootPath`,

@@ -29,23 +29,23 @@ rationale, and the deferred/skipped tools.
 
 - [x] `sitecore_reset_item_fields` — revert fields to standard-values inheritance (`Tools/Items`)
 
-## 4a. `Tools/Jobs` (new) — trigger update jobs
+## 4a. `Tools/Jobs` — trigger update jobs
 
 Index rebuilds and link database rebuilds are long-running background jobs, not quick calls — they
 belong here rather than as a blocking "small companion", so the design accounts for async job
 semantics (start, return a handle, poll) from the outset rather than blocking the request thread.
 
-- [ ] `sitecore_rebuild_index` — full index rebuild, or scoped to a root item; returns a job handle
-- [ ] `sitecore_rebuild_link_database` — **new**, not in the original SPE list. The Link Database is
+- [x] `sitecore_rebuild_index` — full index rebuild, or scoped to a root item; returns a job handle
+- [x] `sitecore_rebuild_link_database` — **new**, not in the original SPE list. The Link Database is
       what backs `get_item_references`/`get_item_referrers` (§2); if it's stale, those tools return
       wrong answers. Worth having once reference tooling exists.
-- [ ] `sitecore_populate_solr_schema` — **new**, not in the original SPE list. Pushes Sitecore's
+- [x] `sitecore_populate_solr_schema` — **new**, not in the original SPE list. Pushes Sitecore's
       field definitions into Solr's managed schema (the Control Panel "Populate Solr Managed Schema"
       operation). Required after adding a computed/indexed field before a rebuild will index it, so it
       pairs naturally with `rebuild_index`. Applies to one index or all. Note this is a Solr-specific
       operation — a no-op / clear "not applicable" on a Lucene instance, not an error.
 
-*(Deferred alongside Diagnostics for this planning pass — see the implementation plan.)*
+
 
 ## 4b. `Tools/Jobs` — observe jobs
 
@@ -86,9 +86,9 @@ hides the entry while the work keeps running. Both were rejected as worse than n
 - [x] `sitecore_add_item_version` / `sitecore_remove_item_version` (`Tools/Items`)
 - [x] `sitecore_query_items` (`Tools/Items`) — Sitecore query language (fast query / XPath-like axes)
 
-## Diagnostics — deferred
+## Diagnostics
 
-- [ ] `sitecore_get_logs` — Sitecore's main log (distinct from this server's own `mcp.log`)
+- [x] `sitecore_get_logs` — Sitecore's main log (distinct from this server's own `mcp.log`)
 
 ---
 
