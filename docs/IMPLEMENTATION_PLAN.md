@@ -1,11 +1,27 @@
 # Implementation plan
 
 Design-level plan for every tool in [SPE_TOOL_BACKLOG.md](SPE_TOOL_BACKLOG.md) **except** `Tools/Jobs`
-§4a (trigger update jobs: `rebuild_index`, `rebuild_link_database`) and Diagnostics
-(`sitecore_get_logs`) — both deferred per current direction. Each entry: arguments, the Sitecore
-Kernel APIs it wraps, behavior, safety/edge cases, and result shape. This is a spec to build from,
-not finished code — Sitecore API names are accurate to the best of available knowledge but should
-be confirmed against the actual Kernel assembly during implementation.
+§4a (trigger update jobs: `rebuild_index`, `rebuild_link_database`, `populate_solr_schema`) and
+Diagnostics (`sitecore_get_logs`) — both deferred per current direction. Each entry: arguments, the
+Sitecore Kernel APIs it wraps, behavior, safety/edge cases, and result shape.
+
+## Status
+
+| Tier | State |
+|---|---|
+| Tier 1 — Publishing + observe jobs (`publish_item`, `get_jobs`) | **Done** — `stop_job` built, measured, removed (see its section) |
+| Tier 2 — references (`get_item_references`/`referrers`, `update_item_referrers`) | **Done** |
+| Tier 3 — Presentation (`get/add/set/switch/remove_rendering`, `reset_layout`) | **Done** |
+| Tier 4 — `reset_item_fields` | **Done** |
+| Tier 5 — Membership (reads, user/role/domain lifecycle, item ACLs, lock/protect) | **Done** — `set_user_password` dropped by decision |
+| Tier 6 — workflow, `change_item_template`, base templates, item versions, `query_items` | **Done** |
+| §4a trigger update jobs + Diagnostics | **Deferred** |
+
+Everything marked Done shipped with live verification on the knh instance; per-tool notes and any
+deviations from this spec are recorded in the corresponding commit messages and
+[TOOL_GUIDE.md](TOOL_GUIDE.md). Two additions not in the original spec landed during implementation:
+the per-tool **admin gate** (`RequiresAdmin` + a one-directional `admin="true"` config attribute that
+can tighten but never loosen), and the bridge's JSON-only stdout guarantee.
 
 Every tool follows this project's existing conventions unless noted otherwise: `ItemQueryArgs`
 (path-or-ID + database + language) for anything addressing one item, `McpToolException` for
@@ -15,7 +31,7 @@ actually stick**, the same discipline `WriteFields`/`notPersisted` already estab
 
 ---
 
-## Tier 1 — `Tools/Publishing` (new) + `Tools/Jobs` §4b manage jobs (new)
+## Tier 1 (DONE) — `Tools/Publishing` (new) + `Tools/Jobs` §4b manage jobs (new)
 
 Grouped together: a publish *is* a Sitecore job (`PublishManager.PublishItem` returns a `Handle`
 immediately), so `get_jobs` is what makes `publish_item` practically usable — you need it to know
@@ -94,7 +110,7 @@ abortable long-running job type appears later, revisit with the cooperative sign
 
 ---
 
-## Tier 2 — `Tools/Items` reference & impact analysis
+## Tier 2 (DONE) — `Tools/Items` reference & impact analysis
 
 New helper: none needed beyond what `Sitecore.Links.LinkDatabase` already provides — thin wrappers.
 
@@ -140,7 +156,7 @@ should point callers at it when results look suspiciously empty.
 
 ---
 
-## Tier 3 — `Tools/Presentation` (new)
+## Tier 3 (DONE) — `Tools/Presentation` (new)
 
 New helpers, mirroring the `Tools/Templates` precedent:
 - `Tools/Presentation/LayoutEditor.cs` — parse `Sitecore.Layouts.LayoutField`/`LayoutDefinition` from
@@ -216,7 +232,7 @@ All presentation tools take a `device` argument (string, default `"Default"`) ra
 
 ---
 
-## Tier 4 — `sitecore_reset_item_fields` (`Tools/Items`)
+## Tier 4 (DONE) — `sitecore_reset_item_fields` (`Tools/Items`)
 
 - **Args:** `ItemQueryArgs` + `fields` (string[], optional — omit to reset every locally-overridden
   field).
@@ -232,7 +248,7 @@ All presentation tools take a `device` argument (string, default `"Default"`) ra
 
 ---
 
-## Tier 5 — `Tools/Membership` (new)
+## Tier 5 (DONE) — `Tools/Membership` (new)
 
 New helper: `Tools/Membership/MembershipResolver.cs` — resolves user/role/domain names (these live
 in the security provider, not the content tree, so `ItemResolver` doesn't apply). Follows the same
@@ -306,7 +322,7 @@ test account inherently needs one, but changing an existing account's password i
 
 ---
 
-## Tier 6 — higher-stakes / more involved
+## Tier 6 (DONE) — higher-stakes / more involved
 
 ### `Tools/Workflow` (new)
 

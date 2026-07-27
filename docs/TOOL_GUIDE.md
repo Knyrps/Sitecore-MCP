@@ -215,6 +215,33 @@ and they are the impact check to run *before* `delete_item`, `move_item`, or `re
   whether it knows how to relink itself; a field that doesn't is skipped rather than having its raw
   value guessed at.
 
+## Workflow
+
+- **`get_workflow_history`** — an item's workflow in one call: which workflow, current state, the
+  **commands available right now** (what `invoke_workflow` could execute), and the transition history
+  (who, when, old → new state, comments). An item not in a workflow says so plainly.
+- **`invoke_workflow`** — execute a command (by display name or ID: `Submit`, `Approve`, …). Only
+  commands available in the item's current state *to this client's user* can run — workflow security
+  applies — and an unavailable command is refused **listing what is available**. The result reports
+  the old and new state from a fresh read, never assuming the transition happened.
+
+## Structure changes — template swaps, inheritance, versions
+
+- **`change_item_template`** — swaps an item's template. Sitecore carries values across by matching
+  field names; anything else is **dropped**. The result diffs every populated content field:
+  `preserved`, `changed` (survived with a different value), and `dataLost` — each dropped field **with
+  its old value**, so nothing disappears silently. Same-template is a no-op.
+- **`add_base_template`** / **`remove_base_template`** (admin) — edit an existing template's
+  inheritance. Removing a base doesn't delete stored values; items just stop inheriting those fields
+  (re-adding the base restores them). Removing a non-base fails listing the current bases.
+- **`add_item_version`** — new version in a language; `sourceLanguage` seeds it with another
+  language's latest field values (a translation starting point — shared and `__` fields excluded).
+- **`remove_item_version`** — remove one version (`version`, default latest). Removing the last
+  version means the item stops existing in that language, and the result says so.
+- **`query_items`** — Sitecore query (XPath-like axes, `fast:` supported) for structural lookups that
+  search/grep are awkward at. Walks the tree live: scope it, and prefer `search` for text/template
+  lookups. Item security applies.
+
 ## Publishing & background jobs
 
 **Content written to `master` is not live until it is published.** Every write tool above changes the

@@ -78,13 +78,13 @@ hides the entry while the work keeps running. Both were rejected as worse than n
 
 ## 6. Higher-stakes / more involved
 
-- [ ] `sitecore_get_workflow_history` (`Tools/Workflow`, new)
-- [ ] `sitecore_invoke_workflow` (`Tools/Workflow`, new)
-- [ ] `sitecore_change_item_template` (`Tools/Items`) — **flagged**: Sitecore's field remapping can
+- [x] `sitecore_get_workflow_history` (`Tools/Workflow`, new)
+- [x] `sitecore_invoke_workflow` (`Tools/Workflow`, new)
+- [x] `sitecore_change_item_template` (`Tools/Items`) — **flagged**: Sitecore's field remapping can
       silently drop data; needs the same "verify what actually persisted" treatment as `WriteFields`
-- [ ] `sitecore_add_base_template` / `sitecore_remove_base_template` (`Tools/Templates`)
-- [ ] `sitecore_add_item_version` / `sitecore_remove_item_version` (`Tools/Items`)
-- [ ] `sitecore_query_items` (`Tools/Items`) — Sitecore query language (fast query / XPath-like axes)
+- [x] `sitecore_add_base_template` / `sitecore_remove_base_template` (`Tools/Templates`)
+- [x] `sitecore_add_item_version` / `sitecore_remove_item_version` (`Tools/Items`)
+- [x] `sitecore_query_items` (`Tools/Items`) — Sitecore query language (fast query / XPath-like axes)
 
 ## Diagnostics — deferred
 
