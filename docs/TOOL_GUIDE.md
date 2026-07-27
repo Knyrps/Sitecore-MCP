@@ -132,6 +132,12 @@ correct `_name` field.
 - **`rename_item`** — validates the new name, refuses a sibling collision.
 - **`delete_item`** — **recycles** by default (recoverable from the Recycle Bin). `permanent: true`
   destroys the item and its subtree irreversibly.
+- **`lock_item`** / **`unlock_item`** — an explicit checkout that persists until released (distinct
+  from the automatic lock write tools take around one edit). `unlock_item` frees your own lock freely;
+  **another user's lock is only overridden by an administrator with `force: true`**, so a lock is
+  never stolen by accident.
+- **`protect_item`** / **`unprotect_item`** — toggle an item's read-only flag, so editors cannot
+  change it in the Content Editor. No-ops report as such.
 
 **Item locking.** Field edits (`update_item`, `rename_item`, `create_item`'s initial fields) are
 lock-aware. Admins bypass it. For a non-admin on an instance with `RequireLockBeforeEditing`, the

@@ -73,9 +73,8 @@ hides the entry while the work keeps running. Both were rejected as worse than n
   action to expose to an LLM, even admin-gated. Excluded, not deferred.
 - [ ] `sitecore_test_item_acl`
 - [ ] `sitecore_add_item_acl` / `sitecore_set_item_acl` / `sitecore_clear_item_acl`
-- [ ] `sitecore_lock_item` / `sitecore_unlock_item` *(item operation, but grouped here since it
-      shipped alongside the Membership batch in planning — placement TBD: could live in `Tools/Items`)*
-- [ ] `sitecore_protect_item` / `sitecore_unprotect_item` *(same placement note as lock/unlock)*
+- [x] `sitecore_lock_item` / `sitecore_unlock_item` *(shipped in `Tools/Items`)*
+- [x] `sitecore_protect_item` / `sitecore_unprotect_item` *(shipped in `Tools/Items`)*
 
 ## 6. Higher-stakes / more involved
 
