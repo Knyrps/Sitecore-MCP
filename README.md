@@ -263,19 +263,65 @@ the first thing to check if a key returns `401`.
 
 ### 5. Verify
 
-Any HTTP client works — no tooling from this repo is needed:
+Any HTTP client works — no tooling from this repo is needed. Call `sitecore_get_context`: it
+confirms authentication, identity mapping, and permissions in one request.
+
+<details open>
+<summary><b>PowerShell</b> (7+, the easiest on Windows)</summary>
+
+```powershell
+$key  = $env:SITECORE_MCP_KEY_ALICE
+$body = @{
+  jsonrpc = '2.0'; id = 1; method = 'tools/call'
+  params  = @{ name = 'sitecore_get_context'; arguments = @{} }
+} | ConvertTo-Json -Depth 6
+
+Invoke-RestMethod -Method Post -Uri 'https://cm.example.com/sitecore/api/mcp' `
+  -Headers @{
+    Authorization          = "Bearer $key"
+    'MCP-Protocol-Version' = '2025-06-18'
+  } `
+  -ContentType 'application/json' -Body $body |
+  Select-Object -ExpandProperty result |
+  Select-Object -ExpandProperty structuredContent
+```
+
+Against a **development certificate**, add `-SkipCertificateCheck`. That parameter does not exist in
+Windows PowerShell 5.1 — use PowerShell 7, which is also what the `pwsh` command runs.
+</details>
+
+<details>
+<summary><b>curl</b></summary>
 
 ```bash
 curl -sS https://cm.example.com/sitecore/api/mcp \
-  -H "Authorization: Bearer $SITECORE_MCP_KEY" \
+  -H "Authorization: Bearer $SITECORE_MCP_KEY_ALICE" \
   -H "Content-Type: application/json" \
   -H "MCP-Protocol-Version: 2025-06-18" \
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"sitecore_get_context","arguments":{}}}'
 ```
 
+`$VAR` is bash syntax — in PowerShell write `$env:SITECORE_MCP_KEY_ALICE`, in `cmd.exe`
+`%SITECORE_MCP_KEY_ALICE%`. A variable that does not expand is sent literally and returns `401`.
+</details>
+
+**Development certificates.** Sitecore dev and container instances usually serve a self-signed or
+locally-issued certificate, which stops the request before it ever reaches the endpoint:
+
+| Error | Meaning | Add |
+|---|---|---|
+| `CRYPT_E_NO_REVOCATION_CHECK (0x80092012)` | Windows curl (schannel) cannot reach a revocation list for the certificate | `--ssl-no-revoke` |
+| `SSL certificate problem: self-signed certificate` | The certificate is not trusted | `-k` (curl) · `-SkipCertificateCheck` (PowerShell 7) |
+
+```bash
+curl -sS --ssl-no-revoke -k https://cm.example.com/sitecore/api/mcp ...
+```
+
+These flags are for verifying against a dev certificate — do not bake them into anything permanent.
+On an instance with a properly trusted certificate none of them are needed.
+
 A healthy response reports the instance, the resolved user, whether writes are allowed, and the
-permitted databases — confirming authentication, identity mapping, and permissions in one call.
-Then check `App_Data/logs/mcp.log.<date>.txt` for the matching `AUDIT` line.
+permitted databases. Then check `App_Data/logs/mcp.log.<date>.txt` for the matching `AUDIT` line.
 
 ## Connecting a client
 
@@ -419,7 +465,8 @@ shared instance), and `<trustedProxies>` for `X-Forwarded-For` handling.
 
 | Symptom | Cause |
 |---|---|
-| `401` for a key that should work | The worker has not re-read its environment. App-pool env vars need a full stop/start, not a recycle. |
+| `CRYPT_E_NO_REVOCATION_CHECK`, or a self-signed certificate error | A development certificate — see [Verify](#5-verify) for the flags. Nothing to do with the module. |
+| `401` for a key that should work | The worker has not re-read its environment (app-pool env vars need a full stop/start, not a recycle), the client's `keyEnvVar` is unset, or a shell variable did not expand and the literal `$NAME` was sent. |
 | Only one client works | Each `<client>` needs a unique `id`; without one the config merge collapses them. |
 | Tool missing from `tools/list` | It is write-gated (check `Mcp.AllowWrites` and the client's `allowWrites`) or admin-gated (the mapped user is not an administrator). |
 | Endpoint returns HTML | The app domain is restarting, or the route is not registered — check the Sitecore log for an initialize-pipeline error. |
