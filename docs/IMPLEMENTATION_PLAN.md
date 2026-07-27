@@ -265,15 +265,10 @@ typically unique — a domain-qualified vs. bare name could still collide.
 - **`sitecore_add_role_member`** / **`sitecore_remove_role_member`** — `RolesInRolesManager.AddUserToRole`/
   `RemoveUserFromRole`. Accepts a user or a role as the member (nested roles are valid in Sitecore).
 
-### `sitecore_set_user_password` — flagged, needs its own review pass
-- Sets a user's password without knowing the old one (admin reset), which in stock ASP.NET
-  membership requires `Membership.Provider.ResetPassword` (only works if the provider allows
-  retrieval/reset) or direct provider manipulation — the exact mechanism is provider-config-dependent
-  and needs confirming against this instance's membership provider before committing to an API.
-  **Before implementing:** decide whether this tool is available to non-admin clients at all (I'd
-  default to admin-only, unlike the rest of the write surface which just needs `AllowWrites`), and
-  make sure every call is unmissable in the audit log (`mcp.log`) given the sensitivity — this one
-  more than any other tool in the whole server touches something credential-adjacent.
+### `sitecore_set_user_password` — DROPPED by decision
+Setting a user's password is not an action to expose to an LLM, even admin-gated and audited, so this
+tool is deliberately not built. (`new_user` still takes an initial password because provisioning a
+test account inherently needs one, but changing an existing account's password is out of scope.)
 
 ### ACL tools (`Tools/Items`, since they operate on an item's security, not a user/role)
 

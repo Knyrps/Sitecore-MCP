@@ -69,7 +69,8 @@ hides the entry while the work keeps running. Both were rejected as worse than n
 - [x] `sitecore_new_domain` / `sitecore_remove_domain`
 - [x] `sitecore_new_role` / `sitecore_remove_role`
 - [x] `sitecore_add_role_member` / `sitecore_remove_role_member`
-- [ ] `sitecore_set_user_password` — **flagged sensitive**, needs its own review pass before shipping
+- ~~`sitecore_set_user_password`~~ — **dropped by decision.** Setting a user's password is not an
+  action to expose to an LLM, even admin-gated. Excluded, not deferred.
 - [ ] `sitecore_test_item_acl`
 - [ ] `sitecore_add_item_acl` / `sitecore_set_item_acl` / `sitecore_clear_item_acl`
 - [ ] `sitecore_lock_item` / `sitecore_unlock_item` *(item operation, but grouped here since it
