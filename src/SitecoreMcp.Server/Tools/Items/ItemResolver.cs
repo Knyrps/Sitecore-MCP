@@ -27,5 +27,17 @@ namespace SitecoreMcp.Server.Tools.Items
 
             return item;
         }
+
+        /// <summary>
+        /// Resolves an item the call is about to change, refusing it (before anything changes) when it
+        /// lies outside every content root. Use for the target of every write, and for the destination
+        /// a write puts an item under.
+        /// </summary>
+        public static Item ResolveWritable(McpCallContext context, string pathOrId, string database, string language)
+        {
+            var item = Resolve(context, pathOrId, database, language);
+            context.EnsureWritable(item);
+            return item;
+        }
     }
 }

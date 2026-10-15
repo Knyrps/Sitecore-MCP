@@ -41,7 +41,7 @@ namespace SitecoreMcp.Server.Tools.Workflow
         /// <inheritdoc />
         protected override McpToolResult Execute(InvokeWorkflowArgs args, McpCallContext context)
         {
-            var item = ItemResolver.Resolve(context, args.Path, args.Database, args.Language);
+            var item = ItemResolver.ResolveWritable(context, args.Path, args.Database, args.Language);
 
             var workflow = item.State.GetWorkflow();
             if (workflow == null)

@@ -28,8 +28,8 @@ namespace SitecoreMcp.Server.Tools.Items
         /// <inheritdoc />
         protected override McpToolResult Execute(MoveItemArgs args, McpCallContext context)
         {
-            var item = ItemResolver.Resolve(context, args.Path, args.Database, args.Language);
-            var destination = ItemResolver.Resolve(context, args.Destination, args.Database, args.Language);
+            var item = ItemResolver.ResolveWritable(context, args.Path, args.Database, args.Language);
+            var destination = ItemResolver.ResolveWritable(context, args.Destination, args.Database, args.Language);
 
             if (destination.Paths.LongID.StartsWith(item.Paths.LongID))
             {

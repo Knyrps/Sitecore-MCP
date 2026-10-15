@@ -2,6 +2,7 @@ using Sitecore.Configuration;
 using Sitecore.Data;
 using Sitecore.Globalization;
 using Sitecore.Security.Accounts;
+using SitecoreMcp.Server.Security;
 using SitecoreMcp.Server.Transport;
 
 namespace SitecoreMcp.Server.Tools
@@ -12,12 +13,16 @@ namespace SitecoreMcp.Server.Tools
     /// </summary>
     public sealed class McpCallContext
     {
-        /// <summary>Creates the context for an authenticated client running as the given user.</summary>
-        public McpCallContext(McpClient client, User user, McpSettings settings)
+        /// <summary>
+        /// Creates the context for an authenticated client running as the given user, under the given
+        /// content scope (null meaning unrestricted).
+        /// </summary>
+        public McpCallContext(McpClient client, User user, McpSettings settings, ContentScope scope = null)
         {
             Client = client;
             User = user;
             Settings = settings;
+            Scope = scope ?? ContentScope.Unrestricted;
         }
 
         /// <summary>The authenticated client behind this call.</summary>
@@ -28,6 +33,12 @@ namespace SitecoreMcp.Server.Tools
 
         /// <summary>The effective settings for this request.</summary>
         public McpSettings Settings { get; }
+
+        /// <summary>
+        /// The content roots (outside them items are read-only), search roots (search only looks there)
+        /// and hidden fields (they do not exist for this call) every tool must respect.
+        /// </summary>
+        public ContentScope Scope { get; }
 
         /// <summary>Whether writes are permitted: the client must allow them and so must the global switch.</summary>
         public bool AllowWrites => Client.AllowWrites && Settings.AllowWrites;

@@ -28,7 +28,7 @@ namespace SitecoreMcp.Server.Tools.Items
         /// <inheritdoc />
         protected override McpToolResult Execute(RenameItemArgs args, McpCallContext context)
         {
-            var item = ItemResolver.Resolve(context, args.Path, args.Database, args.Language);
+            var item = ItemResolver.ResolveWritable(context, args.Path, args.Database, args.Language);
 
             ItemHelper.ValidateName(args.NewName);
 

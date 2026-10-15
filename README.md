@@ -468,6 +468,30 @@ Rules that keep it fail-closed:
 Rate limiting and the audit log key on the effective user; the audit line also records the client
 and whether the identity came from an editor token.
 
+### Content scope: content roots, search roots and hidden fields
+
+Every tool respects three optional limits, set globally inside `<sitecoreMcp>` and/or per client:
+
+| Limit | Effect |
+|---|---|
+| **Content roots** | Paths under which items may be changed. Outside every content root an item is read-only: every write tool (fields, create, move, copy destination, rename, delete, versions, locks, protection, ACLs, presentation, templates, media upload, workflow, publish, referrer updates) refuses before anything changes. `publishRelatedItems` is refused while content roots apply. |
+| **Search roots** | Paths under which `sitecore_search`, `sitecore_grep`, `sitecore_facet` and `sitecore_query_items` look. Independent of content roots. A requested `rootPath` is narrowed to the search roots; outside them the search returns nothing. |
+| **Hidden fields** | Fields (by name or ID) that are never read, found, shown or written: absent from `get_item`, templates, search/grep, references/referrers and the `change_item_template` diff. Writing one fails with the same "field not found" error as a field the template lacks; a query testing one is refused; free-text search hits that match only through a hidden field are dropped (the total is then flagged `totalIsUpperBound`). |
+
+```xml
+<contentRoots hint="list:AddContentRoot"><root>/sitecore/content/Site</root></contentRoots>
+<searchRoots hint="list:AddSearchRoot"><root>/sitecore/content/Site</root></searchRoots>
+<hiddenFields hint="list:AddHiddenField"><field>Api Key</field></hiddenFields>
+
+<client id="corepilot" ... contentRoots="/sitecore/content/Site|/sitecore/media library/Site"
+        searchRoots="/sitecore/content/Site" hiddenFields="Internal Notes" />
+```
+
+An unconfigured limit restricts nothing. A client's `contentRoots`/`searchRoots` replace the global
+lists; its `hiddenFields` add to them. `sitecore_get_context` reports the effective roots (never the
+hidden fields). A host can supply scope from elsewhere (e.g. Sitecore items) with
+`<contentScopeProvider type="..."/>` implementing `SitecoreMcp.Server.Security.IContentScopeProvider`.
+
 ### Security model
 
 | Layer | Behaviour |

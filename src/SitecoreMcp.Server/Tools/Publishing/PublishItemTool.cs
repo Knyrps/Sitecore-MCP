@@ -62,13 +62,20 @@ namespace SitecoreMcp.Server.Tools.Publishing
         /// <inheritdoc />
         protected override McpToolResult Execute(PublishItemArgs args, McpCallContext context)
         {
-            var item = ItemResolver.Resolve(context, args.Path, args.Database, args.Language);
+            var item = ItemResolver.ResolveWritable(context, args.Path, args.Database, args.Language);
 
             var targets = ResolveTargets(item.Database, args.TargetDatabases, context);
             var languages = ResolveLanguages(item, args.Languages, context);
 
             var deep = args.Deep.GetValueOrDefault(false);
             var related = args.PublishRelatedItems.GetValueOrDefault(false);
+            if (related && context.Scope.ContentRoots != null)
+            {
+                // Related items (datasources, media, clones) can sit anywhere, so publishing them could
+                // change items outside every content root.
+                throw new McpToolException(
+                    "publishRelatedItems is not available while content roots apply; publish the related items individually.");
+            }
 
             // 'smart' compares revisions so unchanged items are skipped; 'full' forces the item out
             // even when the target already looks current.

@@ -24,6 +24,7 @@ namespace SitecoreMcp.Server.Transport
         private readonly RateLimiter _rateLimiter;
         private readonly McpToolRegistry _registry;
         private readonly SemaphoreSlim _concurrency;
+        private readonly IContentScopeProvider _scopeProvider;
 
         /// <summary>Creates the pipeline from its collaborators; the concurrency limit comes from settings.</summary>
         public McpRequestPipeline(
@@ -31,7 +32,8 @@ namespace SitecoreMcp.Server.Transport
             GateChain gates,
             McpAuthenticator authenticator,
             RateLimiter rateLimiter,
-            McpToolRegistry registry)
+            McpToolRegistry registry,
+            IContentScopeProvider scopeProvider = null)
         {
             _settings = settings;
             _gates = gates;
@@ -39,6 +41,7 @@ namespace SitecoreMcp.Server.Transport
             _rateLimiter = rateLimiter;
             _registry = registry;
             _concurrency = new SemaphoreSlim(Math.Max(1, settings.MaxConcurrentCalls));
+            _scopeProvider = scopeProvider ?? new ConfiguredContentScopeProvider(null);
         }
 
         /// <summary>Handles a request whose body has already been read within the size limit.</summary>
@@ -144,7 +147,7 @@ namespace SitecoreMcp.Server.Transport
 
             using (new UserSwitcher(user))
             {
-                var context = new McpCallContext(client, user, _settings);
+                var context = new McpCallContext(client, user, _settings, ResolveScope(client));
                 var catalog = _registry.CreateCatalog(context);
                 var dispatcher = new McpDispatcher(catalog, _settings.ServerName, _settings.ServerVersion);
                 outcome = dispatcher.Dispatch(envelope);
@@ -153,6 +156,34 @@ namespace SitecoreMcp.Server.Transport
             stopwatch.Stop();
             Audit(authentication, envelope, outcome, stopwatch.ElapsedMilliseconds);
             return McpResponse.FromOutcome(outcome);
+        }
+
+        /// <summary>
+        /// The call's content scope, with the names of hidden fields configured by ID added so that
+        /// name-only checks (index fields, queries) catch them too.
+        /// </summary>
+        private ContentScope ResolveScope(McpClient client)
+        {
+            var scope = _scopeProvider.GetScope(client) ?? new ContentScope(new string[0], new string[0], null);
+            var ids = scope.HiddenFieldIds;
+            if (ids.Count == 0) return scope;
+
+            // Runs inside the call's UserSwitcher, so definitions are read as the calling user
+            // (SecurityDisabler is never used).
+            var names = new List<string>();
+            foreach (var databaseName in client.Databases)
+            {
+                var database = Sitecore.Configuration.Factory.GetDatabase(databaseName, false);
+                if (database == null) continue;
+
+                foreach (var id in ids)
+                {
+                    var definition = database.GetItem(Sitecore.Data.ID.Parse(id));
+                    if (definition != null) names.Add(definition.Name);
+                }
+            }
+
+            return names.Count == 0 ? scope : scope.WithHiddenFieldNames(names);
         }
 
         private static bool IsActive(string userName)

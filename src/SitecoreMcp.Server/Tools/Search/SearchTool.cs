@@ -6,6 +6,8 @@ using Newtonsoft.Json.Linq;
 using Sitecore.ContentSearch;
 using Sitecore.ContentSearch.Linq;
 using Sitecore.ContentSearch.SearchTypes;
+using Sitecore.Data;
+using Sitecore.Security.AccessControl;
 using SitecoreMcp.Server.Protocol;
 using SitecoreMcp.Server.Schema;
 using SitecoreMcp.Server.Tools.Templates;
@@ -122,8 +124,18 @@ namespace SitecoreMcp.Server.Tools.Search
             using (var searchContext = index.CreateSearchContext())
             {
                 var query = searchContext.GetQueryable<SearchResultItem>();
-                query = ApplyFilters(query, db, args, out var resolvedTemplate);
-                query = ApplySort(query, args);
+                query = ApplyFilters(query, db, args, context, out var resolvedTemplate);
+                if (query == null)
+                {
+                    // Outside every search root, or filtering on a hidden field: nothing can match.
+                    return McpToolResult.Structured(EmptyResult(indexName, args, range));
+                }
+
+                query = ApplySort(query, args, context);
+
+                // The index's free-text content covers every field, hidden ones included, so a text hit
+                // is kept only when the terms appear in a visible field; the total is then an upper bound.
+                var verifyText = !string.IsNullOrEmpty(args.Text) && context.Scope.HasHiddenFields;
 
                 // Echo the template the filter actually resolved to, so a caller that passed a name
                 // (possibly a partial one) learns and can report the real template.
@@ -144,6 +156,7 @@ namespace SitecoreMcp.Server.Tools.Search
                         ["countOnly"] = true
                     };
                     if (templateInfo != null) countResult["resolvedTemplate"] = templateInfo;
+                    if (verifyText) countResult["totalIsUpperBound"] = true;
                     AddEmptyTextHint(countResult, args, total);
                     return McpToolResult.Structured(countResult);
                 }
@@ -160,6 +173,14 @@ namespace SitecoreMcp.Server.Tools.Search
                 {
                     rawCount++;
                     var doc = hit.Document;
+
+                    // Defence in depth: the query is already scoped, but never return an item outside
+                    // the search roots, nor one that matched the text only through a hidden field.
+                    if (!context.Scope.IsInSearchRoot(doc.Path) ||
+                        (verifyText && !MatchesVisibleText(db, doc, args.Text, context)))
+                    {
+                        continue;
+                    }
                     var id = doc.ItemId?.ToString() ?? System.Guid.NewGuid().ToString("B");
 
                     if (!byItem.TryGetValue(id, out var entry))
@@ -198,9 +219,49 @@ namespace SitecoreMcp.Server.Tools.Search
                     ["hits"] = hits
                 };
                 if (templateInfo != null) searchResult["resolvedTemplate"] = templateInfo;
+                if (verifyText) searchResult["totalIsUpperBound"] = true;
                 AddEmptyTextHint(searchResult, args, results.TotalSearchResults);
                 return McpToolResult.Structured(searchResult);
             }
+        }
+
+        private static JObject EmptyResult(string indexName, SearchArgs args, PageRange range)
+        {
+            var empty = new JObject
+            {
+                ["index"] = indexName,
+                ["total"] = 0
+            };
+
+            if (args.CountOnly.GetValueOrDefault(false))
+            {
+                empty["countOnly"] = true;
+                return empty;
+            }
+
+            empty["offset"] = range.Offset;
+            empty["count"] = 0;
+            empty["hasMore"] = false;
+            empty["hits"] = new JArray();
+            return empty;
+        }
+
+        private static bool MatchesVisibleText(Sitecore.Data.Database db, SearchResultItem doc, string text, McpCallContext context)
+        {
+            if (ID.IsNullOrEmpty(doc.ItemId)) return false;
+
+            var language = !string.IsNullOrEmpty(doc.Language) && Sitecore.Globalization.Language.TryParse(doc.Language, out var parsed)
+                ? parsed
+                : context.ResolveLanguage(null);
+            var item = db.GetItem(doc.ItemId, language);
+            if (item == null) return false;
+
+            item.Fields.ReadAll();
+            var values = context.VisibleFields(item)
+                .Where(field => AuthorizationManager.IsAllowed(field, AccessRight.FieldRead, context.User))
+                .Select(field => field.Value)
+                .Concat(new[] { item.Name, item.DisplayName });
+            return Security.ContentScope.TextFoundIn(text, values);
         }
 
         // Free-text search only sees indexed content, so an empty result for a text query often
@@ -217,7 +278,7 @@ namespace SitecoreMcp.Server.Tools.Search
         }
 
         private static IQueryable<SearchResultItem> ApplyFilters(
-            IQueryable<SearchResultItem> query, Sitecore.Data.Database db, SearchArgs args,
+            IQueryable<SearchResultItem> query, Sitecore.Data.Database db, SearchArgs args, McpCallContext context,
             out Sitecore.Data.Items.Item resolvedTemplate)
         {
             resolvedTemplate = null;
@@ -247,16 +308,10 @@ namespace SitecoreMcp.Server.Tools.Search
                 query = query.Where(i => i.TemplateId == templateId);
             }
 
-            if (!string.IsNullOrEmpty(args.RootPath))
+            query = SearchScopeFilter.Restrict(query, db, args.RootPath, context);
+            if (query == null)
             {
-                var root = db.GetItem(args.RootPath);
-                if (root == null)
-                {
-                    throw new McpToolException($"Root '{args.RootPath}' was not found.");
-                }
-
-                var rootId = root.ID;
-                query = query.Where(i => i.Paths.Contains(rootId));
+                return null;
             }
 
             if (!string.IsNullOrEmpty(args.Language))
@@ -269,6 +324,12 @@ namespace SitecoreMcp.Server.Tools.Search
             {
                 foreach (var pair in args.FieldEquals)
                 {
+                    if (context.Scope.IsHiddenIndexField(pair.Key))
+                    {
+                        // Treated like a field the index does not have: nothing matches.
+                        return null;
+                    }
+
                     var field = pair.Key;
                     var value = pair.Value;
                     query = query.Where(i => i[field] == value);
@@ -302,9 +363,10 @@ namespace SitecoreMcp.Server.Tools.Search
             return query;
         }
 
-        private static IQueryable<SearchResultItem> ApplySort(IQueryable<SearchResultItem> query, SearchArgs args)
+        private static IQueryable<SearchResultItem> ApplySort(IQueryable<SearchResultItem> query, SearchArgs args, McpCallContext context)
         {
-            if (string.IsNullOrEmpty(args.SortBy))
+            // Sorting by a hidden field would order results by its values, so it is ignored.
+            if (string.IsNullOrEmpty(args.SortBy) || context.Scope.IsHiddenIndexField(args.SortBy))
             {
                 return query;
             }

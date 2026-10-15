@@ -25,7 +25,8 @@ namespace SitecoreMcp.Server.Tools.Templates
         /// <summary>Resolves the target as a template item, rejecting anything else.</summary>
         public static Item RequireTemplate(McpCallContext context, ItemQueryArgs args)
         {
-            var item = ItemResolver.Resolve(context, args.Path, args.Database, args.Language);
+            // Only the add/remove tools use this, so the template must be inside a content root.
+            var item = ItemResolver.ResolveWritable(context, args.Path, args.Database, args.Language);
             if (item.TemplateID != TemplateIDs.Template)
             {
                 throw new McpToolException($"'{item.Paths.FullPath}' is not a template.");

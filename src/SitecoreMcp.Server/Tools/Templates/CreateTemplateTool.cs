@@ -64,7 +64,7 @@ namespace SitecoreMcp.Server.Tools.Templates
         /// <inheritdoc />
         protected override McpToolResult Execute(CreateTemplateArgs args, McpCallContext context)
         {
-            var parent = ItemResolver.Resolve(context, args.Parent, args.Database, null);
+            var parent = ItemResolver.ResolveWritable(context, args.Parent, args.Database, null);
             var db = parent.Database;
 
             ItemHelper.ValidateName(args.Name, "Invalid template name: ");
@@ -100,7 +100,7 @@ namespace SitecoreMcp.Server.Tools.Templates
             }
 
             return McpToolResult.Structured(
-                TemplateDescriber.DescribeStructure(template.InnerItem, baseTemplates, standardValues));
+                TemplateDescriber.DescribeStructure(template.InnerItem, baseTemplates, standardValues, context.Scope));
         }
 
         private static IReadOnlyList<Item> ResolveBaseTemplates(Database db, string[] references)

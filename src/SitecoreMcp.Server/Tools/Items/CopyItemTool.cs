@@ -38,7 +38,7 @@ namespace SitecoreMcp.Server.Tools.Items
         protected override McpToolResult Execute(CopyItemArgs args, McpCallContext context)
         {
             var item = ItemResolver.Resolve(context, args.Path, args.Database, args.Language);
-            var destination = ItemResolver.Resolve(context, args.Destination, args.Database, args.Language);
+            var destination = ItemResolver.ResolveWritable(context, args.Destination, args.Database, args.Language);
             var name = string.IsNullOrEmpty(args.Name) ? item.Name : args.Name;
             var deep = args.Deep.GetValueOrDefault(true);
 

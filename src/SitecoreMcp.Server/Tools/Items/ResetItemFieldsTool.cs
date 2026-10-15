@@ -40,7 +40,7 @@ namespace SitecoreMcp.Server.Tools.Items
         /// <inheritdoc />
         protected override McpToolResult Execute(ResetItemFieldsArgs args, McpCallContext context)
         {
-            var item = ItemResolver.Resolve(context, args.Path, args.Database, args.Language);
+            var item = ItemResolver.ResolveWritable(context, args.Path, args.Database, args.Language);
             item.Fields.ReadAll();
 
             var targets = args.Fields != null && args.Fields.Length > 0
@@ -119,11 +119,8 @@ namespace SitecoreMcp.Server.Tools.Items
             var fields = new List<Field>();
             foreach (var name in names)
             {
-                var field = item.Fields[name];
-                if (field == null)
-                {
-                    throw new McpToolException($"Field '{name}' does not exist on template '{item.TemplateName}'.");
-                }
+                // A hidden field fails exactly like one the template does not define.
+                var field = context.RequireVisibleField(item, name);
 
                 if (!AuthorizationManager.IsAllowed(field, AccessRight.FieldWrite, context.User))
                 {
@@ -146,7 +143,7 @@ namespace SitecoreMcp.Server.Tools.Items
             var fields = new List<Field>();
             foreach (Field field in item.Fields)
             {
-                if (field.Name.StartsWith("__") || !HasLocalValue(field))
+                if (field.Name.StartsWith("__") || !HasLocalValue(field) || context.IsHidden(field))
                 {
                     continue;
                 }

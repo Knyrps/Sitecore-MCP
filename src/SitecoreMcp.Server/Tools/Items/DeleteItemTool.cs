@@ -29,7 +29,7 @@ namespace SitecoreMcp.Server.Tools.Items
         /// <inheritdoc />
         protected override McpToolResult Execute(DeleteItemArgs args, McpCallContext context)
         {
-            var item = ItemResolver.Resolve(context, args.Path, args.Database, args.Language);
+            var item = ItemResolver.ResolveWritable(context, args.Path, args.Database, args.Language);
             var permanent = args.Permanent.GetValueOrDefault(false);
 
             var summary = new JObject

@@ -21,6 +21,9 @@ namespace SitecoreMcp.Server.Transport
         private readonly List<string> _allowedOrigins = new List<string>();
         private readonly List<string> _allowedAddresses = new List<string>();
         private readonly List<string> _trustedProxies = new List<string>();
+        private List<string> _contentRoots;
+        private List<string> _searchRoots;
+        private List<string> _hiddenFields;
 
         /// <summary>
         /// Adds a client from its raw config node, resolving the key from the named environment variable.
@@ -36,7 +39,10 @@ namespace SitecoreMcp.Server.Transport
                 RequiresEditorToken = IsTrue(XmlUtil.GetAttribute("requiresEditorToken", node)),
                 Audience = XmlUtil.GetAttribute("audience", node),
                 AllowWrites = IsTrue(XmlUtil.GetAttribute("allowWrites", node)),
-                Databases = XmlUtil.GetAttribute("databases", node)
+                Databases = XmlUtil.GetAttribute("databases", node),
+                ContentRoots = XmlUtil.GetAttribute("contentRoots", node),
+                SearchRoots = XmlUtil.GetAttribute("searchRoots", node),
+                HiddenFields = XmlUtil.GetAttribute("hiddenFields", node)
             };
 
             var creation = new McpClientFactory(Environment.GetEnvironmentVariable).Create(definition);
@@ -86,6 +92,22 @@ namespace SitecoreMcp.Server.Transport
         /// <summary>Adds a proxy address whose X-Forwarded-For header is trusted.</summary>
         public void AddProxy(string proxy) => AddTrimmed(_trustedProxies, proxy);
 
+        /// <summary>Adds a global content root: a path under which items may be changed.</summary>
+        public void AddContentRoot(string path) => AddTrimmed(_contentRoots = _contentRoots ?? new List<string>(), path);
+
+        /// <summary>Adds a global search root: a path under which search looks.</summary>
+        public void AddSearchRoot(string path) => AddTrimmed(_searchRoots = _searchRoots ?? new List<string>(), path);
+
+        /// <summary>Adds a global hidden field, by name or ID.</summary>
+        public void AddHiddenField(string nameOrId) => AddTrimmed(_hiddenFields = _hiddenFields ?? new List<string>(), nameOrId);
+
+        /// <summary>
+        /// The source of each call's content scope. Defaults to <see cref="ConfiguredContentScopeProvider"/>
+        /// over the global lists and the client's attributes; set a &lt;contentScopeProvider type="..."/&gt;
+        /// child node to supply scope another way (e.g. from Sitecore items).
+        /// </summary>
+        public IContentScopeProvider ContentScopeProvider { get; set; }
+
         /// <summary>
         /// The editor-token service assembled by <see cref="Build"/>, or null when no signing secret is
         /// configured. Shared by the authenticator (validation) and the issuing endpoint/helper.
@@ -108,7 +130,11 @@ namespace SitecoreMcp.Server.Transport
                 Settings.GetIntSetting("Mcp.RateLimit.Capacity", 30),
                 Settings.GetDoubleSetting("Mcp.RateLimit.RefillPerSecond", 1.0));
 
-            var pipeline = new McpRequestPipeline(settings, gates, authenticator, rateLimiter, _registry);
+            // A list element present but empty (e.g. <contentRoots/> with no children) is never called,
+            // so an unconfigured list stays null and restricts nothing.
+            var scopeProvider = ContentScopeProvider ??
+                new ConfiguredContentScopeProvider(new ContentScope(_contentRoots, _searchRoots, _hiddenFields));
+            var pipeline = new McpRequestPipeline(settings, gates, authenticator, rateLimiter, _registry, scopeProvider);
             return (pipeline, settings);
         }
 

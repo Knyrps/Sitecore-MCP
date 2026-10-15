@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using SitecoreMcp.Server.Security;
 
 namespace SitecoreMcp.Server.Transport
 {
@@ -26,6 +27,18 @@ namespace SitecoreMcp.Server.Transport
 
         /// <summary>The database allow-list, comma- or pipe-separated; defaults to master.</summary>
         public string Databases { get; set; }
+
+        /// <summary>
+        /// The client's content roots, pipe-separated; replaces the global list when set. Unset means
+        /// the global content roots apply.
+        /// </summary>
+        public string ContentRoots { get; set; }
+
+        /// <summary>The client's search roots, pipe-separated; replaces the global list when set.</summary>
+        public string SearchRoots { get; set; }
+
+        /// <summary>The client's hidden fields (names or IDs), pipe-separated; added to the global list.</summary>
+        public string HiddenFields { get; set; }
     }
 
     /// <summary>The client built from a definition, or why the definition was refused.</summary>
@@ -112,11 +125,34 @@ namespace SitecoreMcp.Server.Transport
                 databases.Add("master");
             }
 
+            var scope = new ContentScope(
+                SplitPipeList(definition.ContentRoots),
+                SplitPipeList(definition.SearchRoots),
+                SplitPipeList(definition.HiddenFields));
+
             return McpClientCreation.Success(definition.RequiresEditorToken
                 ? McpClient.ForEditorToken(definition.Id, key,
                     string.IsNullOrEmpty(definition.Audience) ? definition.Id : definition.Audience,
-                    definition.AllowWrites, databases)
-                : McpClient.ForUser(definition.Id, key, definition.User, definition.AllowWrites, databases));
+                    definition.AllowWrites, databases, scope)
+                : McpClient.ForUser(definition.Id, key, definition.User, definition.AllowWrites, databases, scope));
+        }
+
+        /// <summary>
+        /// Splits a pipe-separated scope list (paths and field names may contain commas). Returns null
+        /// for an unset or blank value, meaning "not configured here".
+        /// </summary>
+        internal static List<string> SplitPipeList(string value)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return null;
+
+            var result = new List<string>();
+            foreach (var part in value.Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                var trimmed = part.Trim();
+                if (trimmed.Length > 0) result.Add(trimmed);
+            }
+
+            return result;
         }
 
         private static List<string> SplitList(string value)

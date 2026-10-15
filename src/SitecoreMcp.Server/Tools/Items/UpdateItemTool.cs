@@ -35,7 +35,7 @@ namespace SitecoreMcp.Server.Tools.Items
                 return McpToolResult.Failure("No fields to update were supplied.");
             }
 
-            var item = ItemResolver.Resolve(context, args.Path, args.Database, args.Language);
+            var item = ItemResolver.ResolveWritable(context, args.Path, args.Database, args.Language);
             var write = ItemEditor.WriteFields(item, args.Fields, context);
 
             var result = new ItemProjector(context).ProjectSummary(item);

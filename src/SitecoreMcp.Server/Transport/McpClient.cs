@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using SitecoreMcp.Server.Security;
 
 namespace SitecoreMcp.Server.Transport
 {
@@ -12,12 +13,12 @@ namespace SitecoreMcp.Server.Transport
     {
         /// <summary>Creates a client binding a key to a fixed Sitecore user and its permissions.</summary>
         public McpClient(string key, string userName, bool allowWrites, IEnumerable<string> databases)
-            : this(null, key, userName, false, null, allowWrites, databases)
+            : this(null, key, userName, false, null, allowWrites, databases, null)
         {
         }
 
         private McpClient(string id, string key, string userName, bool requiresEditorToken, string editorTokenAudience,
-            bool allowWrites, IEnumerable<string> databases)
+            bool allowWrites, IEnumerable<string> databases, ContentScope scope)
         {
             Id = id;
             Key = key;
@@ -26,18 +27,21 @@ namespace SitecoreMcp.Server.Transport
             EditorTokenAudience = editorTokenAudience;
             AllowWrites = allowWrites;
             Databases = new HashSet<string>(databases ?? new string[0], StringComparer.OrdinalIgnoreCase);
+            Scope = scope ?? ContentScope.Unrestricted;
         }
 
         /// <summary>Creates a fixed-user client with a config id.</summary>
-        public static McpClient ForUser(string id, string key, string userName, bool allowWrites, IEnumerable<string> databases) =>
-            new McpClient(id, key, userName, false, null, allowWrites, databases);
+        public static McpClient ForUser(string id, string key, string userName, bool allowWrites, IEnumerable<string> databases,
+            ContentScope scope = null) =>
+            new McpClient(id, key, userName, false, null, allowWrites, databases, scope);
 
         /// <summary>
         /// Creates a client that has no fixed user: every call must carry an editor token issued for
         /// <paramref name="audience"/>, and runs as the editor it names.
         /// </summary>
-        public static McpClient ForEditorToken(string id, string key, string audience, bool allowWrites, IEnumerable<string> databases) =>
-            new McpClient(id, key, null, true, audience, allowWrites, databases);
+        public static McpClient ForEditorToken(string id, string key, string audience, bool allowWrites, IEnumerable<string> databases,
+            ContentScope scope = null) =>
+            new McpClient(id, key, null, true, audience, allowWrites, databases, scope);
 
         /// <summary>The client's config id, used in the audit log; may be null for clients built in code.</summary>
         public string Id { get; }
@@ -62,6 +66,12 @@ namespace SitecoreMcp.Server.Transport
 
         /// <summary>The databases this client may target; anything outside the set is refused before a tool runs.</summary>
         public ISet<string> Databases { get; }
+
+        /// <summary>
+        /// The client's own content roots, search roots and hidden fields from its config node. Each
+        /// unconfigured part is null, so the global scope applies; see <see cref="ConfiguredContentScopeProvider"/>.
+        /// </summary>
+        public ContentScope Scope { get; }
 
         /// <summary>Whether the given database name is in this client's allow-list.</summary>
         public bool CanUseDatabase(string database) =>

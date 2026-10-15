@@ -108,16 +108,15 @@ namespace SitecoreMcp.Server.Tools.Items
                 return FieldWriteResult.Empty;
             }
 
+            // Outside every content root an item is read-only, whichever tool got here.
+            context.EnsureWritable(item);
             item.Fields.ReadAll();
 
-            // Validate every field up front so a bad field in the set changes nothing.
+            // Validate every field up front so a bad field in the set changes nothing. A hidden field
+            // fails exactly like one the template does not define.
             foreach (var name in fields.Keys)
             {
-                var field = item.Fields[name];
-                if (field == null)
-                {
-                    throw new McpToolException($"Field '{name}' does not exist on template '{item.TemplateName}'.");
-                }
+                var field = context.RequireVisibleField(item, name);
 
                 if (!AuthorizationManager.IsAllowed(field, AccessRight.FieldWrite, context.User))
                 {

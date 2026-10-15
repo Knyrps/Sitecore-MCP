@@ -53,7 +53,7 @@ namespace SitecoreMcp.Server.Tools.Items
         /// <inheritdoc />
         protected override McpToolResult Execute(CreateItemArgs args, McpCallContext context)
         {
-            var parent = ItemResolver.Resolve(context, args.Parent, args.Database, args.Language);
+            var parent = ItemResolver.ResolveWritable(context, args.Parent, args.Database, args.Language);
 
             ItemHelper.ValidateName(args.Name);
 

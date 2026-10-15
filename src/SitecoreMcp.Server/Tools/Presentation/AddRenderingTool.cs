@@ -58,7 +58,7 @@ namespace SitecoreMcp.Server.Tools.Presentation
         /// <inheritdoc />
         protected override McpToolResult Execute(AddRenderingArgs args, McpCallContext context)
         {
-            var item = ItemResolver.Resolve(context, args.Path, args.Database, args.Language);
+            var item = ItemResolver.ResolveWritable(context, args.Path, args.Database, args.Language);
             var finalLayout = args.FinalLayout.GetValueOrDefault(true);
 
             var renderingItem = RenderingResolver.Resolve(item.Database, args.Rendering);
