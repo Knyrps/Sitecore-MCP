@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using Newtonsoft.Json.Linq;
 using Sitecore;
 using Sitecore.Data.Items;
+using SitecoreMcp.Server.Security;
 
 namespace SitecoreMcp.Server.Tools.Templates
 {
@@ -18,7 +19,7 @@ namespace SitecoreMcp.Server.Tools.Templates
         /// defines or inherits, with type, section, and whether the field is inherited. Standard
         /// "__" fields are omitted to keep the list to meaningful content fields.
         /// </summary>
-        public static JObject Describe(TemplateItem template, Item forItem)
+        public static JObject Describe(TemplateItem template, Item forItem, ContentScope scope = null)
         {
             var ownFieldIds = new HashSet<string>();
             foreach (var own in template.OwnFields)
@@ -29,7 +30,9 @@ namespace SitecoreMcp.Server.Tools.Templates
             var fields = new JArray();
             foreach (var field in template.Fields)
             {
-                if (field.Name.StartsWith("__"))
+                // Hidden fields are left out: to the caller they do not exist.
+                if (field.Name.StartsWith("__") ||
+                    (scope != null && scope.IsHiddenField(field.Name, field.ID.ToString())))
                 {
                     continue;
                 }
@@ -63,7 +66,8 @@ namespace SitecoreMcp.Server.Tools.Templates
         /// with each field's type and flags read from the field item. Reports the resolved base
         /// templates and whether a standard-values item exists. Used to confirm a create or update.
         /// </summary>
-        public static JObject DescribeStructure(Item template, IReadOnlyList<Item> baseTemplates, Item standardValues)
+        public static JObject DescribeStructure(Item template, IReadOnlyList<Item> baseTemplates, Item standardValues,
+            ContentScope scope = null)
         {
             var sections = new JArray();
             var fieldCount = 0;
@@ -78,7 +82,8 @@ namespace SitecoreMcp.Server.Tools.Templates
                 var fields = new JArray();
                 foreach (Item fieldItem in sectionItem.Children)
                 {
-                    if (fieldItem.TemplateID != TemplateIDs.TemplateField)
+                    if (fieldItem.TemplateID != TemplateIDs.TemplateField ||
+                        (scope != null && scope.IsHiddenField(fieldItem.Name, fieldItem.ID.ToString())))
                     {
                         continue;
                     }

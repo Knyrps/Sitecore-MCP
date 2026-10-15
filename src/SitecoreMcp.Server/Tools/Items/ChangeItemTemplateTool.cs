@@ -43,7 +43,7 @@ namespace SitecoreMcp.Server.Tools.Items
         /// <inheritdoc />
         protected override McpToolResult Execute(ChangeItemTemplateArgs args, McpCallContext context)
         {
-            var item = ItemResolver.Resolve(context, args.Path, args.Database, args.Language);
+            var item = ItemResolver.ResolveWritable(context, args.Path, args.Database, args.Language);
             var newTemplate = TemplateResolver.Resolve(item.Database, args.NewTemplate, allowPartial: false);
 
             if (item.TemplateID == newTemplate.ID)
@@ -56,7 +56,7 @@ namespace SitecoreMcp.Server.Tools.Items
             }
 
             var oldTemplateName = item.TemplateName;
-            var before = PopulatedContentFields(item);
+            var before = PopulatedContentFields(item, context);
 
             item.ChangeTemplate(new TemplateItem(newTemplate));
 
@@ -64,7 +64,7 @@ namespace SitecoreMcp.Server.Tools.Items
             var fresh = item.Database.GetItem(item.ID, item.Language, item.Version);
             var after = fresh == null
                 ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-                : PopulatedContentFields(fresh);
+                : PopulatedContentFields(fresh, context);
 
             var preserved = new JArray();
             var changed = new JArray();
@@ -105,13 +105,14 @@ namespace SitecoreMcp.Server.Tools.Items
             return McpToolResult.Structured(result);
         }
 
-        private static Dictionary<string, string> PopulatedContentFields(Item item)
+        private static Dictionary<string, string> PopulatedContentFields(Item item, McpCallContext context)
         {
             item.Fields.ReadAll();
             var fields = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
             foreach (Field field in item.Fields)
             {
-                if (!field.Name.StartsWith("__") && !string.IsNullOrEmpty(field.Value))
+                // Hidden fields stay out of the diff: to this call they do not exist.
+                if (!field.Name.StartsWith("__") && !string.IsNullOrEmpty(field.Value) && !context.IsHidden(field))
                 {
                     fields[field.Name] = field.Value;
                 }

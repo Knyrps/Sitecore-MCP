@@ -77,6 +77,29 @@ namespace SitecoreMcp.Server.Tools.Search
             if (limit < 1) limit = DefaultLimit;
             if (limit > MaxLimit) limit = MaxLimit;
 
+            if (!string.IsNullOrEmpty(args.Text) && context.Scope.HasHiddenFields)
+            {
+                // The index's free-text content covers hidden fields too, and facet counts cannot be
+                // checked hit by hit, so a text-filtered facet could count matches in a hidden field.
+                throw new McpToolException(
+                    "Facet counts with a text filter are not available on this instance. Facet without 'text', or use sitecore_search.");
+            }
+
+            if (context.Scope.IsHiddenIndexField(args.Field))
+            {
+                // Faceting on a hidden field behaves like faceting on a field the index does not have.
+                return McpToolResult.Structured(new JObject
+                {
+                    ["index"] = indexName,
+                    ["field"] = args.Field,
+                    ["totalMatched"] = 0,
+                    ["distinctValues"] = 0,
+                    ["values"] = new JArray(),
+                    ["hint"] = $"No values for '{args.Field}'. Either nothing matched, or '{args.Field}' is not " +
+                               "an indexed field name. Try 'template' or 'language', or use the exact Solr field name."
+                });
+            }
+
             using (var searchContext = index.CreateSearchContext())
             {
                 var query = searchContext.GetQueryable<SearchResultItem>();
@@ -87,16 +110,18 @@ namespace SitecoreMcp.Server.Tools.Search
                     query = query.Where(i => i.Content.Contains(text));
                 }
 
-                if (!string.IsNullOrEmpty(args.RootPath))
+                // Facets count only items under the search roots (and the requested root within them).
+                query = SearchScopeFilter.Restrict(query, db, args.RootPath, context);
+                if (query == null)
                 {
-                    var root = db.GetItem(args.RootPath);
-                    if (root == null)
+                    return McpToolResult.Structured(new JObject
                     {
-                        throw new McpToolException($"Root '{args.RootPath}' was not found.");
-                    }
-
-                    var rootId = root.ID;
-                    query = query.Where(i => i.Paths.Contains(rootId));
+                        ["index"] = indexName,
+                        ["field"] = args.Field,
+                        ["totalMatched"] = 0,
+                        ["distinctValues"] = 0,
+                        ["values"] = new JArray()
+                    });
                 }
 
                 if (!string.IsNullOrEmpty(args.Language))

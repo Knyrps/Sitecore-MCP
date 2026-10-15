@@ -51,10 +51,19 @@ namespace SitecoreMcp.Server.Tools.Items
         {
             var db = context.ResolveDatabase(args.Database);
 
+            // A query finds items, so it is a search: it may not test a hidden field, and returns only
+            // items under the search roots.
+            if (context.Scope.MentionsHiddenField(args.Query))
+            {
+                throw new McpToolException("The query could not be run: it references a field that does not exist.");
+            }
+
             Sitecore.Data.Items.Item[] items;
             try
             {
-                items = db.SelectItems(args.Query) ?? new Sitecore.Data.Items.Item[0];
+                items = (db.SelectItems(args.Query) ?? new Sitecore.Data.Items.Item[0])
+                    .Where(item => context.Scope.IsInSearchRoot(item.Paths.FullPath))
+                    .ToArray();
             }
             catch (Exception ex)
             {

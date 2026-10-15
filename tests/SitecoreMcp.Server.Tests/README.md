@@ -22,6 +22,10 @@ Not covered here — these need a real instance and are run manually against it 
 README and `docs/`): item and field ACLs, `CancelEdit` on failed writes, database allowlisting,
 concurrency limits, app-pool recycling, and client compatibility.
 
+Editor-token issuing/validation and per-request identity resolution are tested in
+`../SitecoreMcp.Server.Portable.Tests`, which compiles the Sitecore-free sources directly and so runs
+without a Sitecore web root (`dotnet test -f net10.0` off Windows).
+
 ## Keeping these tests instance-free
 
 This only works while `Protocol/` and `Schema/` have no Sitecore references and guard logic

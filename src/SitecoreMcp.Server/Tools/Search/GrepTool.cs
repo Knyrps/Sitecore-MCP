@@ -8,6 +8,7 @@ using Sitecore.ContentSearch.Linq;
 using Sitecore.ContentSearch.SearchTypes;
 using Sitecore.Data;
 using Sitecore.Data.Fields;
+using Sitecore.Data.Items;
 using Sitecore.Security.AccessControl;
 using SitecoreMcp.Server.Protocol;
 using SitecoreMcp.Server.Schema;
@@ -102,7 +103,7 @@ namespace SitecoreMcp.Server.Tools.Search
                 ? new HashSet<string>(args.Fields, StringComparer.OrdinalIgnoreCase)
                 : null;
 
-            var candidateIds = ScopedItemIds(index, root.ID, maxScan, out var totalUnderRoot);
+            var candidateIds = ScopedItemIds(index, db, root, context, maxScan, out var totalUnderRoot);
             // totalUnderRoot counts documents (item x language x version); we truncated only if that
             // exceeded the scan cap, not merely because languages inflate the doc count.
             var scanTruncated = totalUnderRoot > maxScan;
@@ -114,7 +115,7 @@ namespace SitecoreMcp.Server.Tools.Search
             foreach (var id in candidateIds)
             {
                 var item = db.GetItem(id);
-                if (item == null)
+                if (item == null || !context.Scope.IsInSearchRoot(item.Paths.FullPath))
                 {
                     continue;
                 }
@@ -129,7 +130,8 @@ namespace SitecoreMcp.Server.Tools.Search
                         continue;
                     }
 
-                    if (string.IsNullOrEmpty(field.Value) ||
+                    // A hidden field is never scanned, so it can never be found.
+                    if (string.IsNullOrEmpty(field.Value) || context.IsHidden(field) ||
                         !AuthorizationManager.IsAllowed(field, AccessRight.FieldRead, context.User))
                     {
                         continue;
@@ -230,12 +232,20 @@ namespace SitecoreMcp.Server.Tools.Search
             };
         }
 
-        private static List<ID> ScopedItemIds(ISearchIndex index, ID rootId, int maxScan, out long totalUnderRoot)
+        private static List<ID> ScopedItemIds(ISearchIndex index, Database db, Item root, McpCallContext context, int maxScan,
+            out long totalUnderRoot)
         {
             using (var searchContext = index.CreateSearchContext())
             {
-                var results = searchContext.GetQueryable<SearchResultItem>()
-                    .Where(i => i.Paths.Contains(rootId))
+                // The root narrowed to the search roots; outside every search root nothing is scanned.
+                var scoped = SearchScopeFilter.Restrict(searchContext.GetQueryable<SearchResultItem>(), db, root.ID.ToString(), context);
+                if (scoped == null)
+                {
+                    totalUnderRoot = 0;
+                    return new List<ID>();
+                }
+
+                var results = scoped
                     .Take(maxScan)
                     .GetResults();
 

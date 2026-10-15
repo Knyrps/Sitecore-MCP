@@ -10,6 +10,7 @@ For working **on** this MCP server. If you want to roll it out on a Sitecore ins
 | `src/SitecoreMcp.Server` | The module deployed to the instance: protocol, transport, tools. |
 | `src/SitecoreMcp.Bridge` | stdio-to-HTTP shim for stdio-only clients (net8.0). |
 | `tests/SitecoreMcp.Server.Tests` | Unit tests for the parts needing no running Sitecore. |
+| `tests/SitecoreMcp.Server.Portable.Tests` | Unit tests that compile the server's Sitecore-free sources directly, so they build and run without a Sitecore web root, on any OS. |
 | `deploy/` | Dev deployment and verification scripts. |
 | `docs/` | Tool guide, adaptation plan, implementation notes. |
 
@@ -22,8 +23,9 @@ Inside the server:
 | `Tools/` | Tool framework: `IMcpTool`, `McpTool<TArgs>`, registry, per-call catalog, call context, paging. |
 | `Tools/Items`, `Tools/Templates`, `Tools/Presentation`, `Tools/Search`, `Tools/Membership`, `Tools/Workflow`, `Tools/Jobs`, `Tools/Publishing`, `Tools/Diagnostics` | Tools grouped by concern, each with its own resolver/describer helpers. |
 | `Schema/` | Reflection-based POCO-to-JSON-Schema generator, driven by `[McpParam]`. |
+| `Security/` | Editor tokens: issuing, validation, and the issue policy. **No Sitecore references** — compiled into the portable tests. |
 
-Keep `Protocol/` and `Schema/` free of Sitecore references. Gate logic in `Transport/` should stay
+Keep `Protocol/`, `Schema/`, and `Security/` free of Sitecore references. Gate logic in `Transport/` should stay
 pure where it can, so it remains testable off-instance.
 
 ## Prerequisites
@@ -55,6 +57,15 @@ assemblies straight from that web root, so the build binds to the exact versions
 dotnet build -c Release
 dotnet test
 ```
+
+Without a Sitecore web root (CI, Linux, macOS) only the portable suite builds:
+
+```bash
+dotnet test tests/SitecoreMcp.Server.Portable.Tests -f net10.0
+```
+
+It also targets `net48` — `dotnet build` of it proves the linked sources compile for the shipping
+framework; on Windows `dotnet test` runs both targets.
 
 A plain build never writes into the web root — deployment is a separate, opt-in step.
 
@@ -155,6 +166,8 @@ through the contract theories, so each one appears as its own test result.
 | `Tools/ToolPermissionTests` | The admin-gated and write sets, written out in full, plus the rule that an admin tool says so in its description. |
 | `Tools/ToolRegistrationTests` | Config and code agree: nothing unregistered, nothing registered that does not exist, no duplicates. |
 | `Protocol/`, `Schema/`, `Transport/` | JSON-RPC envelope, version negotiation, dispatch, schema generation, gates, rate limiting, constant-time key comparison. |
+| `Portable.Tests/Security` | Editor tokens: issued token round-trips; missing, malformed, expired, not-yet-valid, wrong-issuer, wrong-audience, other-secret, tampered, and `alg: none` tokens are refused; issue policy (audience, domains). |
+| `Portable.Tests/Transport` | Effective identity per request: an editor-token client runs as the token's editor and is refused without a valid token (or without a configured secret); fixed-user clients run as their user and ignore editor tokens. Client config rules: an editor-token client cannot have a fixed user. |
 
 The permission sets are deliberately spelled out rather than derived. They are security decisions, so
 removing a gate should fail a test instead of passing quietly.
@@ -166,6 +179,28 @@ declarations that feed it. Everything touching items, search, publishing, or sec
 a real instance as described below.
 
 ## Verifying against a real instance
+
+### Manual check: acting as the logged-in editor (10.3)
+
+The portable tests prove which identity a call resolves to; only a live instance proves the call then
+*runs* as that editor. With `SITECORE_MCP_EDITOR_TOKEN_SECRET` and `SITECORE_MCP_KEY_COREPILOT` set on
+the app pool and a `corepilot` client (`requiresEditorToken="true"`, no `user`) deployed:
+
+1. Create editor `sitecore\mcp-editor` (role `Author`) and an item `/sitecore/content/Home/Restricted`
+   whose security denies that user `item:read`.
+2. Log in as `sitecore\mcp-editor`; in the browser console on the CM origin run
+   `await (await fetch('/sitecore/api/sitecore-mcp/editor-token', {method:'POST'})).json()` and copy
+   `token`. (Logged out, the endpoint returns `401`.)
+3. Call `sitecore_get_context` with `Authorization: Bearer <corepilot key>` and
+   `X-Mcp-Editor-Token: <token>` — `user` is `sitecore\mcp-editor`, `isAdministrator` false.
+4. `sitecore_get_item` on the restricted path returns not-found / no access; the same call as an
+   admin's token returns the item.
+5. Refusals: omit the header, alter one character of the token, wait past the lifetime (or set
+   `Mcp.EditorToken.LifetimeSeconds` to 30), and use a token minted for another audience — each is
+   `401`. Disable the user — `403`.
+6. A `user`-mapped client still works with no editor token; adding `user=` to the corepilot client
+   makes it skipped at startup (warning in `mcp.log`).
+7. `mcp.log` AUDIT lines show `user=sitecore\mcp-editor client=corepilot identity=editor-token`.
 
 The unit tests cover the Sitecore-independent parts (protocol, schema generation, gates, paging).
 Anything touching the Kernel needs a live instance: deploy, then exercise the tool over HTTP or

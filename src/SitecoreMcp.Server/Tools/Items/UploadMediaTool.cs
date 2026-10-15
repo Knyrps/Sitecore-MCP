@@ -92,6 +92,7 @@ namespace SitecoreMcp.Server.Tools.Items
             }
 
             var destination = $"{parent.Paths.FullPath}/{args.Name}";
+            context.EnsureWritablePath(destination);
             var overwrite = args.Overwrite.GetValueOrDefault(false);
             if (!overwrite && db.GetItem(destination) != null)
             {
@@ -124,7 +125,7 @@ namespace SitecoreMcp.Server.Tools.Items
 
             // MediaCreatorOptions.AlternateText does not reliably reach the Alt field on an
             // unversioned item, so write it explicitly when the template has one.
-            if (!string.IsNullOrEmpty(args.Alt) && created.Fields["Alt"] != null &&
+            if (!string.IsNullOrEmpty(args.Alt) && context.FindVisibleField(created, "Alt") != null &&
                 string.IsNullOrEmpty(created["Alt"]))
             {
                 ItemEditor.Edit(created, editable => editable["Alt"] = args.Alt);

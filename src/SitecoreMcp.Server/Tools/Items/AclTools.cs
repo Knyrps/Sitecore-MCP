@@ -201,7 +201,7 @@ namespace SitecoreMcp.Server.Tools.Items
         /// <inheritdoc />
         protected override McpToolResult Execute(WriteItemAclArgs args, McpCallContext context)
         {
-            var item = ItemResolver.Resolve(context, args.Path, args.Database, args.Language);
+            var item = ItemResolver.ResolveWritable(context, args.Path, args.Database, args.Language);
             var account = AclHelper.ResolveAccount(args.Account);
             var right = AclHelper.ResolveRight(args.Right);
             var permission = AclHelper.ResolvePermission(args.Permission);
@@ -232,7 +232,7 @@ namespace SitecoreMcp.Server.Tools.Items
         /// <inheritdoc />
         protected override McpToolResult Execute(WriteItemAclArgs args, McpCallContext context)
         {
-            var item = ItemResolver.Resolve(context, args.Path, args.Database, args.Language);
+            var item = ItemResolver.ResolveWritable(context, args.Path, args.Database, args.Language);
             var account = AclHelper.ResolveAccount(args.Account);
             var right = AclHelper.ResolveRight(args.Right);
             var permission = AclHelper.ResolvePermission(args.Permission);
@@ -278,7 +278,7 @@ namespace SitecoreMcp.Server.Tools.Items
         /// <inheritdoc />
         protected override McpToolResult Execute(ClearItemAclArgs args, McpCallContext context)
         {
-            var item = ItemResolver.Resolve(context, args.Path, args.Database, args.Language);
+            var item = ItemResolver.ResolveWritable(context, args.Path, args.Database, args.Language);
 
             Account account = null;
             if (!string.IsNullOrWhiteSpace(args.Account))

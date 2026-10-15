@@ -36,7 +36,7 @@ namespace SitecoreMcp.Server.Tools.Templates
                 ? new TemplateItem(item)
                 : item.Template;
 
-            return McpToolResult.Structured(TemplateDescriber.Describe(template, item));
+            return McpToolResult.Structured(TemplateDescriber.Describe(template, item, context.Scope));
         }
     }
 }

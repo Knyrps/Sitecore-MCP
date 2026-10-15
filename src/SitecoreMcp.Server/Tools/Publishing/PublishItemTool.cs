@@ -8,13 +8,14 @@ using Sitecore.Jobs;
 using Sitecore.Publishing;
 using SitecoreMcp.Server.Protocol;
 using SitecoreMcp.Server.Schema;
+using SitecoreMcp.Server.Tools.Confirmation;
 using SitecoreMcp.Server.Tools.Items;
 using SitecoreMcp.Server.Tools.Jobs;
 
 namespace SitecoreMcp.Server.Tools.Publishing
 {
     /// <summary>Arguments for <see cref="PublishItemTool"/>.</summary>
-    public sealed class PublishItemArgs : ItemQueryArgs
+    public sealed class PublishItemArgs : DirectChangeArgs
     {
         /// <summary>Whether to publish only what changed, or force-republish the item.</summary>
         [McpParam(
@@ -57,24 +58,64 @@ namespace SitecoreMcp.Server.Tools.Publishing
             "optionally including descendants and related items. Content written to master is not " +
             "live until it is published. This starts a background job and returns its handle " +
             "immediately — poll sitecore_get_jobs to see whether it finished. Targets are subject to " +
-            "the client's permitted databases.";
+            "the client's permitted databases. This is a direct change: called without a confirmationToken " +
+            "it only returns a preview (what goes live, where, in which languages) and publishes nothing; " +
+            "the publish starts once the editor has confirmed.";
 
         /// <inheritdoc />
         protected override McpToolResult Execute(PublishItemArgs args, McpCallContext context)
         {
-            var item = ItemResolver.Resolve(context, args.Path, args.Database, args.Language);
+            var item = ItemResolver.ResolveWritable(context, args.Path, args.Database, args.Language);
 
             var targets = ResolveTargets(item.Database, args.TargetDatabases, context);
             var languages = ResolveLanguages(item, args.Languages, context);
 
             var deep = args.Deep.GetValueOrDefault(false);
             var related = args.PublishRelatedItems.GetValueOrDefault(false);
+            if (related && context.Scope.ContentRoots != null)
+            {
+                // Related items (datasources, media, clones) can sit anywhere, so publishing them could
+                // change items outside every content root.
+                throw new McpToolException(
+                    "publishRelatedItems is not available while content roots apply; publish the related items individually.");
+            }
 
             // 'smart' compares revisions so unchanged items are skipped; 'full' forces the item out
             // even when the target already looks current.
             var full = string.Equals(args.Mode, "full", System.StringComparison.OrdinalIgnoreCase);
             var mode = full ? "full" : "smart";
 
+            var preview = Preview(item, targets, languages, mode, deep, related);
+            return context.ConfirmDirectChange(Name, args, args.ConfirmationToken, preview,
+                () => Publish(item, targets, languages, mode, deep, related));
+        }
+
+        private static DirectChangePreview Preview(Item item, Database[] targets, Language[] languages, string mode, bool deep, bool related)
+        {
+            var targetNames = targets.Select(t => t.Name).ToArray();
+            var languageNames = languages.Select(l => l.Name).ToArray();
+            var scope = deep ? "and all its descendants" : "without its descendants";
+            var summary =
+                $"Publish '{item.Paths.FullPath}' {scope}{(related ? ", plus related items (datasources, media)," : string.Empty)} " +
+                $"to {string.Join(", ", targetNames)} in {string.Join(", ", languageNames)} ({mode} publish). " +
+                "The published content goes live immediately.";
+
+            return new DirectChangePreview(summary, new JObject
+            {
+                ["item"] = item.Paths.FullPath,
+                ["id"] = item.ID.ToString(),
+                ["sourceDatabase"] = item.Database.Name,
+                ["mode"] = mode,
+                ["deep"] = deep,
+                ["publishRelatedItems"] = related,
+                ["targetDatabases"] = new JArray(targetNames.Cast<object>().ToArray()),
+                ["languages"] = new JArray(languageNames.Cast<object>().ToArray())
+            }, ItemFingerprint.Of(item));
+        }
+
+        private static McpToolResult Publish(Item item, Database[] targets, Language[] languages, string mode, bool deep, bool related)
+        {
+            var full = mode == "full";
             var handle = PublishManager.PublishItem(item, targets, languages, deep, !full, related);
             if (handle == null)
             {
