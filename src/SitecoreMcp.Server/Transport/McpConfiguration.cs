@@ -108,7 +108,14 @@ namespace SitecoreMcp.Server.Transport
                 Settings.GetIntSetting("Mcp.RateLimit.Capacity", 30),
                 Settings.GetDoubleSetting("Mcp.RateLimit.RefillPerSecond", 1.0));
 
-            var pipeline = new McpRequestPipeline(settings, gates, authenticator, rateLimiter, _registry);
+            // Confirmation tokens are signed with a per-process random key and kept in memory: a direct
+            // change is confirmed within minutes of its preview, on the instance that previewed it.
+            var confirmations = new ConfirmationService(options: new ConfirmationOptions
+            {
+                Lifetime = TimeSpan.FromSeconds(Math.Max(30, Settings.GetIntSetting("Mcp.Confirmation.LifetimeSeconds", 300)))
+            });
+
+            var pipeline = new McpRequestPipeline(settings, gates, authenticator, rateLimiter, _registry, confirmations);
             return (pipeline, settings);
         }
 

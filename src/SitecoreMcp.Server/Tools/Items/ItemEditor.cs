@@ -4,6 +4,7 @@ using Sitecore.Configuration;
 using Sitecore.Data.Fields;
 using Sitecore.Data.Items;
 using Sitecore.Security.AccessControl;
+using SitecoreMcp.Server.Tools.Confirmation;
 
 namespace SitecoreMcp.Server.Tools.Items
 {
@@ -96,22 +97,14 @@ namespace SitecoreMcp.Server.Tools.Items
         }
 
         /// <summary>
-        /// Writes a field-name/value map to an item, checking field-write permission and field
-        /// existence first, then verifying the values actually persisted. Throws
-        /// <see cref="McpToolException"/> for an unknown field or one the user may not write, before
-        /// any change is made.
+        /// Checks that every named field exists on the item and that the user may write it. Throws
+        /// <see cref="McpToolException"/> on the first that fails, so a bad field in a set changes nothing.
         /// </summary>
-        public static FieldWriteResult WriteFields(Item item, IReadOnlyDictionary<string, string> fields, McpCallContext context)
+        public static void ValidateFields(Item item, IEnumerable<string> names, McpCallContext context)
         {
-            if (fields == null || fields.Count == 0)
-            {
-                return FieldWriteResult.Empty;
-            }
-
             item.Fields.ReadAll();
 
-            // Validate every field up front so a bad field in the set changes nothing.
-            foreach (var name in fields.Keys)
+            foreach (var name in names)
             {
                 var field = item.Fields[name];
                 if (field == null)
@@ -124,6 +117,50 @@ namespace SitecoreMcp.Server.Tools.Items
                     throw new McpToolException($"Not permitted to write field '{name}'.");
                 }
             }
+        }
+
+        /// <summary>
+        /// Describes what writing a field-name/value map would do - each field's current and new value
+        /// and whether it is shared or unversioned - without changing anything. Call after
+        /// <see cref="ValidateFields"/>.
+        /// </summary>
+        public static IReadOnlyList<PlannedFieldChange> PlanFieldChanges(Item item, IReadOnlyDictionary<string, string> fields)
+        {
+            var planned = new List<PlannedFieldChange>();
+            if (fields == null)
+            {
+                return planned;
+            }
+
+            item.Fields.ReadAll();
+            foreach (var pair in fields)
+            {
+                var field = item.Fields[pair.Key];
+                if (field == null)
+                {
+                    continue;
+                }
+
+                planned.Add(new PlannedFieldChange(field.Name, field.Shared, field.Unversioned, field.Value ?? string.Empty, pair.Value ?? string.Empty));
+            }
+
+            return planned;
+        }
+
+        /// <summary>
+        /// Writes a field-name/value map to an item, checking field-write permission and field
+        /// existence first, then verifying the values actually persisted. Throws
+        /// <see cref="McpToolException"/> for an unknown field or one the user may not write, before
+        /// any change is made.
+        /// </summary>
+        public static FieldWriteResult WriteFields(Item item, IReadOnlyDictionary<string, string> fields, McpCallContext context)
+        {
+            if (fields == null || fields.Count == 0)
+            {
+                return FieldWriteResult.Empty;
+            }
+
+            ValidateFields(item, fields.Keys, context);
 
             // Only write fields whose value actually differs, keeping the value each held before the
             // write. Writing a field to its current value is a no-op EndEdit reports as "nothing saved",

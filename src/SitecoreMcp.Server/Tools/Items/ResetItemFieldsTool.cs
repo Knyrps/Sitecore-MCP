@@ -5,6 +5,7 @@ using Sitecore.Data.Fields;
 using Sitecore.Security.AccessControl;
 using SitecoreMcp.Server.Protocol;
 using SitecoreMcp.Server.Schema;
+using SitecoreMcp.Server.Tools.Confirmation;
 
 namespace SitecoreMcp.Server.Tools.Items
 {
@@ -14,6 +15,13 @@ namespace SitecoreMcp.Server.Tools.Items
         /// <summary>The fields to reset; omit to reset every locally-set content field.</summary>
         [McpParam(Description = "Field names to reset to their template's standard-values inheritance. Omit to reset every locally-set content field (skips __-prefixed standard fields, which you must name explicitly).")]
         public string[] Fields { get; set; }
+
+        /// <summary>The token from this tool's preview, needed only when a shared or unversioned field is reset.</summary>
+        [McpParam(Description =
+            "Confirmation token, needed only when the reset changes a shared or unversioned field. Omit it: such " +
+            "a reset then returns a preview and changes nothing. It runs when the same call, with identical " +
+            "arguments, carries the token the editor confirmed.")]
+        public string ConfirmationToken { get; set; }
     }
 
     /// <summary>
@@ -35,7 +43,9 @@ namespace SitecoreMcp.Server.Tools.Items
             "item's own values (the opposite of update_item, which sets a value). Name the fields, or " +
             "omit them to reset every locally-set content field. A named field that is already " +
             "inherited is left alone. After saving it verifies each reset actually took: a field that " +
-            "reads back with a local value (re-applied by a save handler) is listed in notPersisted.";
+            "reads back with a local value (re-applied by a save handler) is listed in notPersisted. " +
+            "Resetting a shared or unversioned field is a direct change: it first returns a preview and " +
+            "changes nothing until the editor has confirmed.";
 
         /// <inheritdoc />
         protected override McpToolResult Execute(ResetItemFieldsArgs args, McpCallContext context)
@@ -70,6 +80,23 @@ namespace SitecoreMcp.Server.Tools.Items
                 return McpToolResult.Structured(noop);
             }
 
+            // Resetting a shared or unversioned field is live for every version at once, so it is a
+            // direct change that needs the editor's confirmation, like writing one.
+            var planned = targets
+                .Where(HasLocalValue)
+                .Select(f => new PlannedFieldChange(f.Name, f.Shared, f.Unversioned, f.Value, f.GetStandardValue()))
+                .ToList();
+            if (SharedFieldWrites.NeedingConfirmation(planned).Count == 0)
+            {
+                return Apply(item, toReset, alreadyInherited);
+            }
+
+            var preview = SharedFieldWrites.Preview(item.Paths.FullPath, item.Language.Name, planned, ItemFingerprint.Of(item));
+            return context.ConfirmDirectChange(Name, args, args.ConfirmationToken, preview, () => Apply(item, toReset, alreadyInherited));
+        }
+
+        private static McpToolResult Apply(Sitecore.Data.Items.Item item, List<string> toReset, List<string> alreadyInherited)
+        {
             ItemEditor.Edit(item, editable =>
             {
                 foreach (var name in toReset)
