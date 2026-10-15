@@ -48,6 +48,15 @@ namespace SitecoreMcp.Server.Transport
         /// <summary>The server version reported in the initialize response.</summary>
         public string ServerVersion { get; set; } = "0.1.0";
 
+        /// <summary>The route the editor-token issuing endpoint is served on.</summary>
+        public string EditorTokenEndpointPath { get; set; } = "sitecore/api/sitecore-mcp/editor-token";
+
+        /// <summary>Pipe- or comma-separated Sitecore domains whose users may be issued an editor token.</summary>
+        public string EditorTokenDomains { get; set; } = "sitecore";
+
+        /// <summary>The audiences of the configured clients that require an editor token.</summary>
+        public ISet<string> EditorTokenAudiences { get; } = new HashSet<string>(StringComparer.Ordinal);
+
         private static ISet<string> New() => new HashSet<string>(StringComparer.OrdinalIgnoreCase);
     }
 }

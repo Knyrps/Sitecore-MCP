@@ -1,0 +1,41 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Tests for the server code that has no Sitecore dependency, compiled straight from the server's
+    source files instead of through a project reference. That keeps it buildable and runnable on any
+    OS without a Sitecore web root: net10.0 runs everywhere, net48 proves the same sources compile
+    for the framework the server actually ships on (and runs on Windows).
+
+    Off Windows run:  dotnet test -f net10.0
+    A file listed below must stay free of Sitecore references; if one needs Sitecore.Kernel, move the
+    Sitecore-coupled part out of it rather than dropping it from this list.
+  -->
+  <PropertyGroup>
+    <TargetFrameworks>net10.0;net48</TargetFrameworks>
+    <RootNamespace>SitecoreMcp.Server.Portable.Tests</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <Nullable>disable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\src\SitecoreMcp.Server\Security\*.cs" Link="Linked\Security\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\SitecoreMcp.Server\Transport\McpAuthenticator.cs" Link="Linked\Transport\McpAuthenticator.cs" />
+    <Compile Include="..\..\src\SitecoreMcp.Server\Transport\McpAuthentication.cs" Link="Linked\Transport\McpAuthentication.cs" />
+    <Compile Include="..\..\src\SitecoreMcp.Server\Transport\McpClient.cs" Link="Linked\Transport\McpClient.cs" />
+    <Compile Include="..\..\src\SitecoreMcp.Server\Transport\McpClientFactory.cs" Link="Linked\Transport\McpClientFactory.cs" />
+    <Compile Include="..\..\src\SitecoreMcp.Server\Transport\McpHeaders.cs" Link="Linked\Transport\McpHeaders.cs" />
+    <Compile Include="..\..\src\SitecoreMcp.Server\Transport\IMcpHttpRequest.cs" Link="Linked\Transport\IMcpHttpRequest.cs" />
+    <Compile Include="..\..\src\SitecoreMcp.Server\Transport\FixedTimeComparer.cs" Link="Linked\Transport\FixedTimeComparer.cs" />
+    <Compile Include="..\SitecoreMcp.Server.Tests\Support\FakeHttpRequest.cs" Link="Support\FakeHttpRequest.cs" />
+    <!-- The pre-existing key-authentication tests, so fixed-user behaviour is pinned off Windows too. -->
+    <Compile Include="..\SitecoreMcp.Server.Tests\Transport\McpAuthenticatorTests.cs" Link="Existing\McpAuthenticatorTests.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+    <PackageReference Include="Newtonsoft.Json" Version="13.0.3" />
+  </ItemGroup>
+
+</Project>

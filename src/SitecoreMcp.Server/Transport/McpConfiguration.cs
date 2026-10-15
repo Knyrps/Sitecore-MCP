@@ -4,6 +4,7 @@ using System.Xml;
 using Sitecore.Configuration;
 using Sitecore.Xml;
 using SitecoreMcp.Server.Diagnostics;
+using SitecoreMcp.Server.Security;
 using SitecoreMcp.Server.Tools;
 
 namespace SitecoreMcp.Server.Transport
@@ -21,34 +22,31 @@ namespace SitecoreMcp.Server.Transport
         private readonly List<string> _allowedAddresses = new List<string>();
         private readonly List<string> _trustedProxies = new List<string>();
 
-        /// <summary>Adds a client from its raw config node, resolving the key from the named environment variable.</summary>
+        /// <summary>
+        /// Adds a client from its raw config node, resolving the key from the named environment variable.
+        /// The rules (one identity source per client, no keyless client) live in <see cref="McpClientFactory"/>.
+        /// </summary>
         public void AddClient(XmlNode node)
         {
-            var keyEnvVar = XmlUtil.GetAttribute("keyEnvVar", node);
-            var user = XmlUtil.GetAttribute("user", node);
-            var allowWrites = string.Equals(XmlUtil.GetAttribute("allowWrites", node), "true", StringComparison.OrdinalIgnoreCase);
-            var databases = SplitList(XmlUtil.GetAttribute("databases", node));
-
-            if (string.IsNullOrEmpty(keyEnvVar) || string.IsNullOrEmpty(user))
+            var definition = new McpClientDefinition
             {
-                McpLog.Warn("Skipping client with missing keyEnvVar or user.");
+                Id = XmlUtil.GetAttribute("id", node),
+                KeyEnvVar = XmlUtil.GetAttribute("keyEnvVar", node),
+                User = XmlUtil.GetAttribute("user", node),
+                RequiresEditorToken = IsTrue(XmlUtil.GetAttribute("requiresEditorToken", node)),
+                Audience = XmlUtil.GetAttribute("audience", node),
+                AllowWrites = IsTrue(XmlUtil.GetAttribute("allowWrites", node)),
+                Databases = XmlUtil.GetAttribute("databases", node)
+            };
+
+            var creation = new McpClientFactory(Environment.GetEnvironmentVariable).Create(definition);
+            if (!creation.Succeeded)
+            {
+                McpLog.Warn(creation.Error);
                 return;
             }
 
-            var key = Environment.GetEnvironmentVariable(keyEnvVar);
-            if (string.IsNullOrEmpty(key))
-            {
-                // Never register a keyless client: a null key would risk matching an empty presented key.
-                McpLog.Warn($"Environment variable '{keyEnvVar}' is not set; client for '{user}' disabled.");
-                return;
-            }
-
-            if (databases.Count == 0)
-            {
-                databases.Add("master");
-            }
-
-            _clients.Add(new McpClient(key, user, allowWrites, databases));
+            _clients.Add(creation.Client);
         }
 
         /// <summary>
@@ -88,6 +86,12 @@ namespace SitecoreMcp.Server.Transport
         /// <summary>Adds a proxy address whose X-Forwarded-For header is trusted.</summary>
         public void AddProxy(string proxy) => AddTrimmed(_trustedProxies, proxy);
 
+        /// <summary>
+        /// The editor-token service assembled by <see cref="Build"/>, or null when no signing secret is
+        /// configured. Shared by the authenticator (validation) and the issuing endpoint/helper.
+        /// </summary>
+        public EditorTokenService EditorTokens { get; private set; }
+
         /// <summary>Reads settings, assembles the pipeline, and returns it with the effective settings.</summary>
         public (McpRequestPipeline Pipeline, McpSettings Settings) Build()
         {
@@ -98,13 +102,53 @@ namespace SitecoreMcp.Server.Transport
             foreach (var proxy in _trustedProxies) settings.TrustedProxies.Add(proxy);
 
             var gates = GateChain.FromSettings(settings);
-            var authenticator = new McpAuthenticator(_clients);
+            EditorTokens = LoadEditorTokens(settings);
+            var authenticator = new McpAuthenticator(_clients, EditorTokens);
             var rateLimiter = new RateLimiter(
                 Settings.GetIntSetting("Mcp.RateLimit.Capacity", 30),
                 Settings.GetDoubleSetting("Mcp.RateLimit.RefillPerSecond", 1.0));
 
             var pipeline = new McpRequestPipeline(settings, gates, authenticator, rateLimiter, _registry);
             return (pipeline, settings);
+        }
+
+        /// <summary>
+        /// Builds the editor-token service from the secret in the environment variable named by
+        /// Mcp.EditorToken.SecretEnvVar, and records the audiences of the clients that require one.
+        /// Returns null when no secret (or too short a one) is set: every editor-token client is then
+        /// refused and no token can be issued - fail closed, never a fallback identity.
+        /// </summary>
+        private EditorTokenService LoadEditorTokens(McpSettings settings)
+        {
+            foreach (var client in _clients)
+            {
+                if (client.RequiresEditorToken) settings.EditorTokenAudiences.Add(client.EditorTokenAudience);
+            }
+
+            var secretEnvVar = Settings.GetSetting("Mcp.EditorToken.SecretEnvVar", "SITECORE_MCP_EDITOR_TOKEN_SECRET");
+            var secret = string.IsNullOrEmpty(secretEnvVar) ? null : Environment.GetEnvironmentVariable(secretEnvVar);
+            if (string.IsNullOrEmpty(secret))
+            {
+                if (settings.EditorTokenAudiences.Count > 0)
+                {
+                    McpLog.Warn($"Environment variable '{secretEnvVar}' is not set; editor tokens cannot be issued or accepted, so every requiresEditorToken client is refused.");
+                }
+
+                return null;
+            }
+
+            if (secret.Length < EditorTokenService.MinimumSecretLength)
+            {
+                McpLog.Error($"The editor-token secret in '{secretEnvVar}' is shorter than {EditorTokenService.MinimumSecretLength} characters; editor tokens are disabled.");
+                return null;
+            }
+
+            return new EditorTokenService(secret, new EditorTokenOptions
+            {
+                Issuer = Settings.GetSetting("Mcp.EditorToken.Issuer", "SitecoreMcp"),
+                Lifetime = TimeSpan.FromSeconds(Math.Max(30, Settings.GetIntSetting("Mcp.EditorToken.LifetimeSeconds", 900))),
+                ClockSkew = TimeSpan.FromSeconds(Math.Max(0, Settings.GetIntSetting("Mcp.EditorToken.ClockSkewSeconds", 60)))
+            });
         }
 
         private static McpSettings LoadSettings() => new McpSettings
@@ -118,22 +162,13 @@ namespace SitecoreMcp.Server.Transport
             MaxFieldLength = Settings.GetIntSetting("Mcp.MaxFieldLength", 2000),
             VerboseErrors = Settings.GetBoolSetting("Mcp.VerboseErrors", false),
             ServerName = Settings.GetSetting("Mcp.ServerName", "SitecoreMcp"),
-            ServerVersion = Settings.GetSetting("Mcp.ServerVersion", "0.1.0")
+            ServerVersion = Settings.GetSetting("Mcp.ServerVersion", "0.1.0"),
+            EditorTokenEndpointPath = Settings.GetSetting("Mcp.EditorToken.EndpointPath", "sitecore/api/sitecore-mcp/editor-token"),
+            EditorTokenDomains = Settings.GetSetting("Mcp.EditorToken.AllowedDomains", "sitecore")
         };
 
-        private static List<string> SplitList(string value)
-        {
-            var result = new List<string>();
-            if (string.IsNullOrEmpty(value)) return result;
-
-            foreach (var part in value.Split(new[] { ',', '|' }, StringSplitOptions.RemoveEmptyEntries))
-            {
-                var trimmed = part.Trim();
-                if (trimmed.Length > 0) result.Add(trimmed);
-            }
-
-            return result;
-        }
+        private static bool IsTrue(string value) =>
+            string.Equals(value, "true", StringComparison.OrdinalIgnoreCase);
 
         private static void AddTrimmed(List<string> list, string value)
         {

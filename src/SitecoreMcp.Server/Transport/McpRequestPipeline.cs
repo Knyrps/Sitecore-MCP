@@ -5,6 +5,7 @@ using System.Threading;
 using Sitecore.Security.Accounts;
 using SitecoreMcp.Server.Diagnostics;
 using SitecoreMcp.Server.Protocol;
+using SitecoreMcp.Server.Security;
 using SitecoreMcp.Server.Tools;
 
 namespace SitecoreMcp.Server.Transport
@@ -12,7 +13,8 @@ namespace SitecoreMcp.Server.Transport
     /// <summary>
     /// Runs one request through the ordered chain: method check, stateless gates, authentication,
     /// rate limiting, parsing, protocol-version check, a concurrency limit, and finally dispatch
-    /// under the client's Sitecore identity. Every path returns an <see cref="McpResponse"/>.
+    /// under the call's effective Sitecore identity - the client's fixed user, or for an editor-token
+    /// client the editor its token names. Every path returns an <see cref="McpResponse"/>.
     /// </summary>
     public sealed class McpRequestPipeline
     {
@@ -54,15 +56,26 @@ namespace SitecoreMcp.Server.Transport
                 return McpResponse.FromOutcome(gate.ToOutcome());
             }
 
-            var client = _authenticator.Authenticate(request);
-            if (client == null)
+            var authentication = _authenticator.AuthenticateCall(request);
+            if (authentication.Client == null)
             {
                 McpLog.Warn($"Rejected unauthenticated request from {request.RemoteAddress}.");
                 return Error(401, JsonRpcErrorCodes.InvalidRequest, "Authentication is required.",
                     Header("WWW-Authenticate", "Bearer"));
             }
 
-            var limit = _rateLimiter.TryAcquire(client.UserName);
+            if (!authentication.Succeeded)
+            {
+                // An editor-token client with no usable token. There is no fixed-user fallback.
+                McpLog.Warn($"Rejected request from client '{authentication.Client.Id}': editor token {Describe(authentication.EditorTokenFailure)}.");
+                return Error(401, JsonRpcErrorCodes.InvalidRequest,
+                    $"A valid editor token is required ({McpHeaders.EditorToken}); the token presented was {Describe(authentication.EditorTokenFailure)}.",
+                    Header("WWW-Authenticate", "Bearer error=\"invalid_token\""));
+            }
+
+            // Rate limiting and audit key on the effective user, so editors sharing one client
+            // neither starve each other nor blur attribution.
+            var limit = _rateLimiter.TryAcquire(authentication.UserName);
             if (!limit.Allowed)
             {
                 return Error(429, JsonRpcErrorCodes.InvalidRequest, "Rate limit exceeded.",
@@ -92,7 +105,7 @@ namespace SitecoreMcp.Server.Transport
 
             try
             {
-                return Execute(client, envelope);
+                return Execute(authentication, envelope);
             }
             finally
             {
@@ -100,15 +113,32 @@ namespace SitecoreMcp.Server.Transport
             }
         }
 
-        private McpResponse Execute(McpClient client, McpRequestEnvelope envelope)
+        private McpResponse Execute(McpAuthentication authentication, McpRequestEnvelope envelope)
         {
-            if (!User.Exists(client.UserName))
+            var client = authentication.Client;
+            var userName = authentication.UserName;
+
+            if (!User.Exists(userName))
             {
-                McpLog.Error($"Configured user '{client.UserName}' does not exist.");
+                if (authentication.IsEditor)
+                {
+                    // A validly signed token for an account deleted since it was issued.
+                    McpLog.Warn($"Rejected editor token for '{userName}' from client '{client.Id}': the user no longer exists.");
+                    return Error(401, JsonRpcErrorCodes.InvalidRequest, "The editor named by the token does not exist.");
+                }
+
+                McpLog.Error($"Configured user '{userName}' does not exist.");
                 return Error(500, JsonRpcErrorCodes.InternalError, "The configured MCP user does not exist.");
             }
 
-            var user = User.FromName(client.UserName, true);
+            if (authentication.IsEditor && !IsActive(userName))
+            {
+                // Disabled or locked out since the token was issued: the token must not outlive the account.
+                McpLog.Warn($"Rejected editor token for '{userName}' from client '{client.Id}': the account is disabled or locked out.");
+                return Error(403, JsonRpcErrorCodes.InvalidRequest, "The editor's account is disabled or locked out.");
+            }
+
+            var user = User.FromName(userName, true);
             var stopwatch = Stopwatch.StartNew();
             DispatchOutcome outcome;
 
@@ -121,18 +151,41 @@ namespace SitecoreMcp.Server.Transport
             }
 
             stopwatch.Stop();
-            Audit(client, envelope, outcome, stopwatch.ElapsedMilliseconds);
+            Audit(authentication, envelope, outcome, stopwatch.ElapsedMilliseconds);
             return McpResponse.FromOutcome(outcome);
         }
 
-        private static void Audit(McpClient client, McpRequestEnvelope envelope, DispatchOutcome outcome, long elapsedMs)
+        private static bool IsActive(string userName)
+        {
+            var membershipUser = System.Web.Security.Membership.GetUser(userName, false);
+            return membershipUser != null && membershipUser.IsApproved && !membershipUser.IsLockedOut;
+        }
+
+        private static string Describe(EditorTokenFailure failure)
+        {
+            switch (failure)
+            {
+                case EditorTokenFailure.Missing: return "missing";
+                case EditorTokenFailure.Expired: return "expired";
+                case EditorTokenFailure.NotYetValid: return "not yet valid";
+                case EditorTokenFailure.WrongAudience: return "issued for another client";
+                case EditorTokenFailure.WrongIssuer: return "issued by someone else";
+                case EditorTokenFailure.InvalidSignature: return "not validly signed";
+                case EditorTokenFailure.NotConfigured: return "unverifiable (editor tokens are not configured on this instance)";
+                default: return "malformed";
+            }
+        }
+
+        private static void Audit(McpAuthentication authentication, McpRequestEnvelope envelope, DispatchOutcome outcome, long elapsedMs)
         {
             var target = envelope.Method == "tools/call"
                 ? envelope.Params?.Value<string>("name") ?? "(unknown)"
                 : envelope.Method;
 
             McpLog.Audit(
-                $"user={client.UserName} method={envelope.Method} target={target} " +
+                $"user={authentication.UserName} client={authentication.Client.Id ?? "(unnamed)"} " +
+                $"identity={(authentication.IsEditor ? "editor-token" : "client-user")} " +
+                $"method={envelope.Method} target={target} " +
                 $"status={outcome.StatusCode} durationMs={elapsedMs}");
         }
 

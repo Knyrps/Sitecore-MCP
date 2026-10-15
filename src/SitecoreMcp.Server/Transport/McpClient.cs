@@ -4,25 +4,58 @@ using System.Collections.Generic;
 namespace SitecoreMcp.Server.Transport
 {
     /// <summary>
-    /// A configured API client: its secret key, the Sitecore user its calls run as, and the
-    /// limits on what it may do. One client maps to exactly one Sitecore identity.
+    /// A configured API client: its secret key, whose Sitecore identity its calls run as, and the
+    /// limits on what it may do. A client either maps to exactly one fixed Sitecore user, or
+    /// requires an editor token on every call and runs as the editor that token names. Never both.
     /// </summary>
     public sealed class McpClient
     {
-        /// <summary>Creates a client binding a key to a Sitecore user and its permissions.</summary>
+        /// <summary>Creates a client binding a key to a fixed Sitecore user and its permissions.</summary>
         public McpClient(string key, string userName, bool allowWrites, IEnumerable<string> databases)
+            : this(null, key, userName, false, null, allowWrites, databases)
         {
+        }
+
+        private McpClient(string id, string key, string userName, bool requiresEditorToken, string editorTokenAudience,
+            bool allowWrites, IEnumerable<string> databases)
+        {
+            Id = id;
             Key = key;
             UserName = userName;
+            RequiresEditorToken = requiresEditorToken;
+            EditorTokenAudience = editorTokenAudience;
             AllowWrites = allowWrites;
             Databases = new HashSet<string>(databases ?? new string[0], StringComparer.OrdinalIgnoreCase);
         }
 
+        /// <summary>Creates a fixed-user client with a config id.</summary>
+        public static McpClient ForUser(string id, string key, string userName, bool allowWrites, IEnumerable<string> databases) =>
+            new McpClient(id, key, userName, false, null, allowWrites, databases);
+
+        /// <summary>
+        /// Creates a client that has no fixed user: every call must carry an editor token issued for
+        /// <paramref name="audience"/>, and runs as the editor it names.
+        /// </summary>
+        public static McpClient ForEditorToken(string id, string key, string audience, bool allowWrites, IEnumerable<string> databases) =>
+            new McpClient(id, key, null, true, audience, allowWrites, databases);
+
+        /// <summary>The client's config id, used in the audit log; may be null for clients built in code.</summary>
+        public string Id { get; }
+
         /// <summary>The resolved secret key this client presents, compared in constant time.</summary>
         public string Key { get; }
 
-        /// <summary>The Sitecore user (e.g. "sitecore\mcp-agent") whose security context calls run under.</summary>
+        /// <summary>
+        /// The fixed Sitecore user (e.g. "sitecore\mcp-agent") whose security context calls run under;
+        /// null for a client that requires an editor token.
+        /// </summary>
         public string UserName { get; }
+
+        /// <summary>Whether every call must carry a valid editor token, and run as the editor it names.</summary>
+        public bool RequiresEditorToken { get; }
+
+        /// <summary>The audience an editor token must be issued for to be accepted from this client.</summary>
+        public string EditorTokenAudience { get; }
 
         /// <summary>Whether this client may invoke write tools, subject also to the global write switch.</summary>
         public bool AllowWrites { get; }

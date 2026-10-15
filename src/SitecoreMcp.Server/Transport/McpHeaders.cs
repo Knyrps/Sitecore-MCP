@@ -8,5 +8,11 @@ namespace SitecoreMcp.Server.Transport
 
         /// <summary>The alternative API-key header, used when no Authorization bearer is present.</summary>
         public const string ApiKey = "X-Mcp-Key";
+
+        /// <summary>
+        /// The editor token naming the Sitecore editor a call runs as. Required on every call from a
+        /// client configured with requiresEditorToken="true"; ignored from any other client.
+        /// </summary>
+        public const string EditorToken = "X-Mcp-Editor-Token";
     }
 }
