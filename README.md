@@ -1,7 +1,7 @@
 # Sitecore MCP Server
 
 An [MCP](https://modelcontextprotocol.io) server that runs **inside** Sitecore as a .NET Framework
-assembly, giving an AI agent 66 tools over the real Kernel API — items, templates, presentation,
+assembly, giving an AI agent 67 tools over the real Kernel API — items, templates, presentation,
 media, search, publishing, security, and workflow — under a real Sitecore user.
 
 **Target:** Sitecore XM/XP 10.x · .NET Framework 4.8 · IIS or containers.
@@ -518,6 +518,8 @@ All under `<sitecore><settings>`; patch what you need per environment.
 | `Mcp.MaxRequestBytes` | `1048576` | Request body cap — also the practical ceiling on media uploads. |
 | `Mcp.MaxConcurrentCalls` | `4` | Tool calls executed concurrently before shedding. |
 | `Mcp.MaxFieldLength` | `2000` | Field values are truncated beyond this in output. |
+| `Mcp.Images.MaxDimension` | `1024` | Longest side, in pixels, of an image returned as image content; larger images are scaled down (never up). A smaller `maxDimension` argument is honoured, a larger one is capped here. |
+| `Mcp.Images.MaxBytes` | `1048576` | Largest encoded size (before base64) of a returned image; a heavier rendering is re-rendered smaller until it fits, or refused. |
 | `Mcp.VerboseErrors` | `false` | Full error detail in responses. Development only. |
 | `Mcp.RateLimit.Capacity` | `30` | Burst size per client. |
 | `Mcp.RateLimit.RefillPerSecond` | `1` | Sustained request rate per client. |
@@ -548,7 +550,7 @@ shared instance), and `<trustedProxies>` for `X-Forwarded-For` handling.
 
 ## Tools
 
-66 tools for an administrator client; 40 for a non-admin one (26 are admin-gated). Call
+67 tools for an administrator client; 41 for a non-admin one (26 are admin-gated). Call
 **`sitecore_get_context`** first — it reports the user, whether writes are allowed, and which
 databases and languages are available.
 
@@ -629,13 +631,25 @@ with `finalLayout: false` for the shared base.
 </details>
 
 <details>
-<summary><b>Media</b> (1)</summary>
+<summary><b>Media</b> (2)</summary>
 
 | Tool | Purpose |
 |---|---|
+| `sitecore_get_media_image` | Return a media-library image as MCP image content the model can see, resized within `Mcp.Images.*`, with its path, MIME type, dimensions and alt text. |
 | `sitecore_upload_media` | Upload a file from base64 into the media library; the extension decides the media type. Returns the item and its `mediaUrl`. |
 
-Bounded by `Mcp.MaxRequestBytes` — suited to icons and documents, not video.
+Uploads are bounded by `Mcp.MaxRequestBytes` — suited to icons and documents, not video.
+
+**Image results.** `sitecore_get_media_image` returns an MCP image content block
+(`{"type":"image","data":"<base64>","mimeType":"image/png"}`) followed by a text block, and the same
+description as `structuredContent` (`id`, `path`, `mimeType`, `width`, `height`, `originalWidth`,
+`originalHeight`, `resized`, `sizeBytes`, `limits`, and `alt` unless hidden). PNG, JPEG, GIF and
+WebP are supported; SVG and non-image media are refused. Sitecore's media pipeline does the resizing,
+so the image keeps its format. The read runs as the calling user (an editor-token client's editor),
+so an image they cannot read is "not found", and a hidden `Blob` field makes the item unreadable as
+an image. Custom tools return images through `McpToolResult.Image(bytes, mimeType, metadata)` /
+`McpContent.FromImage`; `SitecoreMcp.Server.Media.MediaImageEncoder` applies the limits to any
+resizer.
 </details>
 
 <details>

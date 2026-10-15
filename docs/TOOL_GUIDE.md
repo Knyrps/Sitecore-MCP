@@ -196,6 +196,11 @@ never the raw field.
 
 ## Media
 
+- **`get_media_image`** — look at a media library image. Returns it as image content the model can
+  see (PNG, JPEG, GIF, WebP), scaled down to the server's limits (`Mcp.Images.MaxDimension`, default
+  1024 px; `Mcp.Images.MaxBytes`, default 1 MB), plus its path, dimensions and alt text. Pass
+  `maxDimension` for a smaller preview. Use it to describe an image or draft alt text. SVG, PDFs and
+  documents are refused — they are not images a model can take.
 - **`upload_media`** — upload a file into the media library from base64 content; the extension in
   `fileName` decides the media type (Image/File/Pdf/…), `alt` sets alternate text, and an existing
   sibling fails unless `overwrite: true`. The endpoint's request-size limit applies (default ~1 MB

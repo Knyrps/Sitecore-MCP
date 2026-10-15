@@ -39,6 +39,12 @@ namespace SitecoreMcp.Server.Transport
         /// <summary>The length beyond which a field value is truncated in tool output.</summary>
         public int MaxFieldLength { get; set; } = 2000;
 
+        /// <summary>The longest side, in pixels, of an image returned as image content; larger images are scaled down.</summary>
+        public int MaxImageDimension { get; set; } = 1024;
+
+        /// <summary>The largest encoded size, in bytes (before base64), of an image returned as image content.</summary>
+        public long MaxImageBytes { get; set; } = 1024 * 1024;
+
         /// <summary>Whether full error detail is returned to the client. Should stay off outside development.</summary>
         public bool VerboseErrors { get; set; }
 

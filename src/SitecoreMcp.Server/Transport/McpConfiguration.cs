@@ -186,6 +186,8 @@ namespace SitecoreMcp.Server.Transport
             MaxRequestBytes = Settings.GetLongSetting("Mcp.MaxRequestBytes", 1024 * 1024),
             MaxConcurrentCalls = Settings.GetIntSetting("Mcp.MaxConcurrentCalls", 4),
             MaxFieldLength = Settings.GetIntSetting("Mcp.MaxFieldLength", 2000),
+            MaxImageDimension = Settings.GetIntSetting("Mcp.Images.MaxDimension", 1024),
+            MaxImageBytes = Settings.GetLongSetting("Mcp.Images.MaxBytes", 1024 * 1024),
             VerboseErrors = Settings.GetBoolSetting("Mcp.VerboseErrors", false),
             ServerName = Settings.GetSetting("Mcp.ServerName", "SitecoreMcp"),
             ServerVersion = Settings.GetSetting("Mcp.ServerVersion", "0.1.0"),

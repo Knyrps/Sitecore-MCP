@@ -26,6 +26,9 @@
     <Compile Include="..\..\src\SitecoreMcp.Server\Transport\McpHeaders.cs" Link="Linked\Transport\McpHeaders.cs" />
     <Compile Include="..\..\src\SitecoreMcp.Server\Transport\IMcpHttpRequest.cs" Link="Linked\Transport\IMcpHttpRequest.cs" />
     <Compile Include="..\..\src\SitecoreMcp.Server\Transport\FixedTimeComparer.cs" Link="Linked\Transport\FixedTimeComparer.cs" />
+    <Compile Include="..\..\src\SitecoreMcp.Server\Protocol\JsonRpc.cs" Link="Linked\Protocol\JsonRpc.cs" />
+    <Compile Include="..\..\src\SitecoreMcp.Server\Protocol\McpToolResult.cs" Link="Linked\Protocol\McpToolResult.cs" />
+    <Compile Include="..\..\src\SitecoreMcp.Server\Media\*.cs" Link="Linked\Media\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\SitecoreMcp.Server\Tools\McpToolException.cs" Link="Linked\Tools\McpToolException.cs" />
     <Compile Include="..\SitecoreMcp.Server.Tests\Support\FakeHttpRequest.cs" Link="Support\FakeHttpRequest.cs" />
     <!-- The pre-existing key-authentication tests, so fixed-user behaviour is pinned off Windows too. -->
