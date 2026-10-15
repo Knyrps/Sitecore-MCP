@@ -134,7 +134,15 @@ namespace SitecoreMcp.Server.Transport
             // so an unconfigured list stays null and restricts nothing.
             var scopeProvider = ContentScopeProvider ??
                 new ConfiguredContentScopeProvider(new ContentScope(_contentRoots, _searchRoots, _hiddenFields));
-            var pipeline = new McpRequestPipeline(settings, gates, authenticator, rateLimiter, _registry, scopeProvider);
+
+            // Confirmation tokens are signed with a per-process random key and kept in memory: a direct
+            // change is confirmed within minutes of its preview, on the instance that previewed it.
+            var confirmations = new ConfirmationService(options: new ConfirmationOptions
+            {
+                Lifetime = TimeSpan.FromSeconds(Math.Max(30, Settings.GetIntSetting("Mcp.Confirmation.LifetimeSeconds", 300)))
+            });
+
+            var pipeline = new McpRequestPipeline(settings, gates, authenticator, rateLimiter, _registry, scopeProvider, confirmations);
             return (pipeline, settings);
         }
 

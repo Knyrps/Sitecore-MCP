@@ -2,7 +2,9 @@ using Sitecore.Configuration;
 using Sitecore.Data;
 using Sitecore.Globalization;
 using Sitecore.Security.Accounts;
+using SitecoreMcp.Server.Protocol;
 using SitecoreMcp.Server.Security;
+using SitecoreMcp.Server.Tools.Confirmation;
 using SitecoreMcp.Server.Transport;
 
 namespace SitecoreMcp.Server.Tools
@@ -45,6 +47,27 @@ namespace SitecoreMcp.Server.Tools
 
         /// <summary>Whether this call runs as a Sitecore administrator, which gates admin-only tools.</summary>
         public bool IsAdministrator => User != null && User.IsAdministrator;
+
+        /// <summary>
+        /// Issues and redeems confirmation tokens for direct changes. Null means confirmation is not
+        /// available, and every direct change is refused (fail closed).
+        /// </summary>
+        public ConfirmationService Confirmations { get; set; }
+
+        /// <summary>
+        /// The content roots this call may change, as a boundary over <see cref="Scope"/> (the pipeline
+        /// sets it per call; unrestricted by default). Move, copy and rename refuse to cross them.
+        /// </summary>
+        public IContentRootBoundary ContentRoots { get; set; } = UnrestrictedContentRoots.Instance;
+
+        /// <summary>
+        /// Runs a direct change through server-enforced confirmation: without a token the preview and a
+        /// single-use token come back and nothing changes; with the token from that same preview the
+        /// change runs. See <see cref="DirectChangeGate"/>.
+        /// </summary>
+        public McpToolResult ConfirmDirectChange(
+            string tool, object arguments, string confirmationToken, DirectChangePreview preview, System.Func<McpToolResult> change) =>
+            DirectChangeGate.Run(Confirmations, tool, User?.Name, arguments, confirmationToken, preview, change);
 
         /// <summary>
         /// Resolves a database by name, defaulting to master when none is given, and rejecting one

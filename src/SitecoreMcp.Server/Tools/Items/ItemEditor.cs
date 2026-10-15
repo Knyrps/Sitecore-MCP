@@ -4,6 +4,7 @@ using Sitecore.Configuration;
 using Sitecore.Data.Fields;
 using Sitecore.Data.Items;
 using Sitecore.Security.AccessControl;
+using SitecoreMcp.Server.Tools.Confirmation;
 
 namespace SitecoreMcp.Server.Tools.Items
 {
@@ -96,6 +97,56 @@ namespace SitecoreMcp.Server.Tools.Items
         }
 
         /// <summary>
+        /// Checks that every named field exists on the item and that the user may write it. Throws
+        /// <see cref="McpToolException"/> on the first that fails, so a bad field in a set changes nothing.
+        /// </summary>
+        public static void ValidateFields(Item item, IEnumerable<string> names, McpCallContext context)
+        {
+            // Outside every content root an item is read-only, whichever tool got here.
+            context.EnsureWritable(item);
+            item.Fields.ReadAll();
+
+            // A hidden field fails exactly like one the template does not define.
+            foreach (var name in names)
+            {
+                var field = context.RequireVisibleField(item, name);
+
+                if (!AuthorizationManager.IsAllowed(field, AccessRight.FieldWrite, context.User))
+                {
+                    throw new McpToolException($"Not permitted to write field '{name}'.");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Describes what writing a field-name/value map would do - each field's current and new value
+        /// and whether it is shared or unversioned - without changing anything. Call after
+        /// <see cref="ValidateFields"/>.
+        /// </summary>
+        public static IReadOnlyList<PlannedFieldChange> PlanFieldChanges(Item item, IReadOnlyDictionary<string, string> fields)
+        {
+            var planned = new List<PlannedFieldChange>();
+            if (fields == null)
+            {
+                return planned;
+            }
+
+            item.Fields.ReadAll();
+            foreach (var pair in fields)
+            {
+                var field = item.Fields[pair.Key];
+                if (field == null)
+                {
+                    continue;
+                }
+
+                planned.Add(new PlannedFieldChange(field.Name, field.Shared, field.Unversioned, field.Value ?? string.Empty, pair.Value ?? string.Empty));
+            }
+
+            return planned;
+        }
+
+        /// <summary>
         /// Writes a field-name/value map to an item, checking field-write permission and field
         /// existence first, then verifying the values actually persisted. Throws
         /// <see cref="McpToolException"/> for an unknown field or one the user may not write, before
@@ -108,21 +159,7 @@ namespace SitecoreMcp.Server.Tools.Items
                 return FieldWriteResult.Empty;
             }
 
-            // Outside every content root an item is read-only, whichever tool got here.
-            context.EnsureWritable(item);
-            item.Fields.ReadAll();
-
-            // Validate every field up front so a bad field in the set changes nothing. A hidden field
-            // fails exactly like one the template does not define.
-            foreach (var name in fields.Keys)
-            {
-                var field = context.RequireVisibleField(item, name);
-
-                if (!AuthorizationManager.IsAllowed(field, AccessRight.FieldWrite, context.User))
-                {
-                    throw new McpToolException($"Not permitted to write field '{name}'.");
-                }
-            }
+            ValidateFields(item, fields.Keys, context);
 
             // Only write fields whose value actually differs, keeping the value each held before the
             // write. Writing a field to its current value is a no-op EndEdit reports as "nothing saved",

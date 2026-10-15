@@ -1,6 +1,7 @@
 using Sitecore.Data;
 using SitecoreMcp.Server.Protocol;
 using SitecoreMcp.Server.Schema;
+using SitecoreMcp.Server.Security;
 
 namespace SitecoreMcp.Server.Tools.Items
 {
@@ -20,7 +21,10 @@ namespace SitecoreMcp.Server.Tools.Items
         public bool? Deep { get; set; }
     }
 
-    /// <summary>Copies an item (optionally its subtree) under a new parent.</summary>
+    /// <summary>
+    /// Copies an item (optionally its subtree) under a new parent, refusing before anything is created
+    /// when the editor may not create there or the copy would cross content roots.
+    /// </summary>
     public sealed class CopyItemTool : McpTool<CopyItemArgs>
     {
         /// <inheritdoc />
@@ -32,7 +36,8 @@ namespace SitecoreMcp.Server.Tools.Items
         /// <inheritdoc />
         public override string Description =>
             "Copy a Sitecore item to a new parent, by default including its descendants. Fails if the " +
-            "destination already has a child with the target name.";
+            "destination already has a child with the target name, if the destination is in another content " +
+            "root, or if the editor may not create items under the destination.";
 
         /// <inheritdoc />
         protected override McpToolResult Execute(CopyItemArgs args, McpCallContext context)
@@ -46,6 +51,8 @@ namespace SitecoreMcp.Server.Tools.Items
             {
                 return McpToolResult.Failure($"'{destination.Paths.FullPath}' already has a child named '{name}'.");
             }
+
+            RelocationGuard.Ensure(context, RelocationKind.Copy, item, destination);
 
             try
             {

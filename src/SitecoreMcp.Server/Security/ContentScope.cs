@@ -92,6 +92,31 @@ namespace SitecoreMcp.Server.Security
         public bool IsInContentRoot(string path) => _contentRoots == null || IsUnderAny(path, _contentRoots);
 
         /// <summary>
+        /// The content root that contains <paramref name="path"/> (a root counts as inside itself):
+        /// "/" when content roots are not configured, the longest matching root when several nest, and
+        /// null when the path is outside every content root. Matching is segment-aware and
+        /// case-insensitive, like <see cref="IsInContentRoot"/>.
+        /// </summary>
+        public string ContentRootOf(string path)
+        {
+            if (_contentRoots == null) return "/";
+
+            var normalized = NormalizePath(path);
+            if (normalized == null) return null;
+
+            string best = null;
+            foreach (var root in _contentRoots)
+            {
+                if (IsUnder(normalized, root) && (best == null || root.Length > best.Length))
+                {
+                    best = root;
+                }
+            }
+
+            return best;
+        }
+
+        /// <summary>
         /// Throws <see cref="McpToolException"/> when an item at <paramref name="path"/> is outside every
         /// content root, so the write is refused before anything changes.
         /// </summary>

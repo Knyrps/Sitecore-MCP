@@ -107,6 +107,36 @@ correct `_name` field.
   one document per item × language × version, so ungrouped results are mostly the same items
   repeated. `total` is the raw document count; `count` is distinct items on the page.
 
+## Direct changes need confirmation
+
+Some changes take effect immediately and cannot be discarded, so the editor confirms them before
+they run. The server enforces this: `delete_item`, `move_item`, `rename_item`, `publish_item`,
+`invoke_workflow`, and `update_item` / `reset_item_fields` **when they change a shared or
+unversioned field** are *direct changes*.
+
+- Called **without** `confirmationToken`, a direct-change tool validates everything it can (item
+  exists, rights, content roots, collisions) and returns a **preview** — nothing is changed. The text
+  content is a human-readable summary; `structuredContent` carries `status: "confirmationRequired"`,
+  `summary`, `preview` (the details) and `confirmation: { token, expiresAt, argument }`.
+- Called again with the **identical arguments** plus `confirmationToken`, the change runs. The token
+  is **single-use**, **expires** (`Mcp.Confirmation.LifetimeSeconds`, default 300s), and is bound to
+  the tool, the editor, the canonical arguments and the target's state (ID, path, revision) at preview
+  time. Different arguments, another editor, an item edited/moved since the preview, a reused or
+  expired token all return `isError` with `status: "confirmationRejected"` and a `reason`
+  (`mismatch`, `alreadyUsed`, `expired`, `malformed`) — and change nothing.
+- The token is **only** in `structuredContent`, never in the text, so a client can show the preview
+  to the model while withholding the token until a person confirms. A model should not try to
+  confirm on its own.
+- Tokens are signed with a per-process key and held in memory: valid only on the instance that
+  issued them, and lost on an app-pool recycle (preview again).
+
+**Move, copy and rename pre-checks.** Before previewing (or copying), these refuse when the editor
+lacks the rights — **delete** on the source and **create** on the destination for a move, **create**
+on the destination for a copy, **rename** on the item for a rename — or when the change would leave
+or cross the configured **content roots** (a content root itself cannot be moved or renamed). Until
+content roots are configured every path counts as inside one root, so only rights are checked.
+`delete_item` likewise checks delete rights and the content roots before previewing.
+
 ## Writes (only when allowed)
 
 - **`create_item`** — parent, name, template (name/path/ID), optional initial fields. Validates the
@@ -135,12 +165,14 @@ correct `_name` field.
   would be a footgun). A named-but-already-inherited field is a benign no-op; a field that reads back
   with a local value after reset (a save handler re-applied it) is reported in `notPersisted`.
 - **`move_item`** — refuses a destination inside the item's own subtree, or a name collision.
+  Direct change (see above).
 - **`copy_item`** — copies **field data**, not just structure. A deep copy of a site clones *all* its
   content (hostnames, form IDs, settings). If you want "same skeleton, empty fields", copy is the
   wrong tool — build the structure fresh. Reports `childCount`.
-- **`rename_item`** — validates the new name, refuses a sibling collision.
+- **`rename_item`** — validates the new name, refuses a sibling collision. Direct change.
 - **`delete_item`** — **recycles** by default (recoverable from the Recycle Bin). `permanent: true`
-  destroys the item and its subtree irreversibly.
+  destroys the item and its subtree irreversibly. Direct change: the preview reports descendant and
+  referrer counts.
 - **`lock_item`** / **`unlock_item`** — an explicit checkout that persists until released (distinct
   from the automatic lock write tools take around one edit). `unlock_item` frees your own lock freely;
   **another user's lock is only overridden by an administrator with `force: true`**, so a lock is

@@ -25,6 +25,7 @@ namespace SitecoreMcp.Server.Transport
         private readonly McpToolRegistry _registry;
         private readonly SemaphoreSlim _concurrency;
         private readonly IContentScopeProvider _scopeProvider;
+        private readonly ConfirmationService _confirmations;
 
         /// <summary>Creates the pipeline from its collaborators; the concurrency limit comes from settings.</summary>
         public McpRequestPipeline(
@@ -33,13 +34,15 @@ namespace SitecoreMcp.Server.Transport
             McpAuthenticator authenticator,
             RateLimiter rateLimiter,
             McpToolRegistry registry,
-            IContentScopeProvider scopeProvider = null)
+            IContentScopeProvider scopeProvider = null,
+            ConfirmationService confirmations = null)
         {
             _settings = settings;
             _gates = gates;
             _authenticator = authenticator;
             _rateLimiter = rateLimiter;
             _registry = registry;
+            _confirmations = confirmations;
             _concurrency = new SemaphoreSlim(Math.Max(1, settings.MaxConcurrentCalls));
             _scopeProvider = scopeProvider ?? new ConfiguredContentScopeProvider(null);
         }
@@ -147,7 +150,12 @@ namespace SitecoreMcp.Server.Transport
 
             using (new UserSwitcher(user))
             {
-                var context = new McpCallContext(client, user, _settings, ResolveScope(client));
+                var scope = ResolveScope(client);
+                var context = new McpCallContext(client, user, _settings, scope)
+                {
+                    Confirmations = _confirmations,
+                    ContentRoots = new ContentScopeBoundary(scope)
+                };
                 var catalog = _registry.CreateCatalog(context);
                 var dispatcher = new McpDispatcher(catalog, _settings.ServerName, _settings.ServerVersion);
                 outcome = dispatcher.Dispatch(envelope);
