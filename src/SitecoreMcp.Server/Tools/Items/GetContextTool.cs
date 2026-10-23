@@ -52,8 +52,19 @@ namespace SitecoreMcp.Server.Tools.Items
                 ["isAdministrator"] = context.User.IsAdministrator,
                 ["allowWrites"] = context.AllowWrites,
                 ["databases"] = databases,
-                ["languages"] = languages
+                ["languages"] = languages,
+                ["contentRoots"] = RootsOrNull(context.Scope.ContentRoots),
+                ["searchRoots"] = RootsOrNull(context.Scope.SearchRoots)
             });
+        }
+
+        // Null means unrestricted. Hidden fields are deliberately not listed: to the caller they do not exist.
+        private static JToken RootsOrNull(System.Collections.Generic.IReadOnlyList<string> roots)
+        {
+            if (roots == null) return JValue.CreateNull();
+            var array = new JArray();
+            foreach (var root in roots) array.Add(root);
+            return array;
         }
 
         private static string FirstDatabase(McpCallContext context)

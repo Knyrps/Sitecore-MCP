@@ -27,7 +27,7 @@ namespace SitecoreMcp.Server.Tools.Items
         /// <inheritdoc />
         protected override McpToolResult Execute(ProtectItemArgs args, McpCallContext context)
         {
-            var item = ItemResolver.Resolve(context, args.Path, args.Database, args.Language);
+            var item = ItemResolver.ResolveWritable(context, args.Path, args.Database, args.Language);
             if (item[FieldIDs.ReadOnly] == "1")
             {
                 return Result(item, true, "The item was already protected.");
@@ -70,7 +70,7 @@ namespace SitecoreMcp.Server.Tools.Items
         /// <inheritdoc />
         protected override McpToolResult Execute(ProtectItemArgs args, McpCallContext context)
         {
-            var item = ItemResolver.Resolve(context, args.Path, args.Database, args.Language);
+            var item = ItemResolver.ResolveWritable(context, args.Path, args.Database, args.Language);
             if (item[FieldIDs.ReadOnly] != "1")
             {
                 return ProtectItemTool.Result(item, false, "The item was not protected.");

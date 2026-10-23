@@ -38,7 +38,7 @@ namespace SitecoreMcp.Server.Tools.Items
         /// <inheritdoc />
         protected override McpToolResult Execute(AddItemVersionArgs args, McpCallContext context)
         {
-            var item = ItemResolver.Resolve(context, args.Path, args.Database, args.Language);
+            var item = ItemResolver.ResolveWritable(context, args.Path, args.Database, args.Language);
             var created = item.Versions.AddVersion();
             if (created == null)
             {
@@ -60,7 +60,9 @@ namespace SitecoreMcp.Server.Tools.Items
                 {
                     // Shared fields hold one value across languages, and versioned __ fields
                     // (workflow, locks, statistics) must not be cloned into a new version.
-                    if (!field.Name.StartsWith("__") && !field.Shared && !string.IsNullOrEmpty(field.Value))
+                    // Hidden fields do not exist for this call, so they are neither read nor copied.
+                    if (!field.Name.StartsWith("__") && !field.Shared && !string.IsNullOrEmpty(field.Value) &&
+                        !context.IsHidden(field))
                     {
                         values[field.Name] = field.Value;
                     }
@@ -116,7 +118,7 @@ namespace SitecoreMcp.Server.Tools.Items
         /// <inheritdoc />
         protected override McpToolResult Execute(RemoveItemVersionArgs args, McpCallContext context)
         {
-            var item = ItemResolver.Resolve(context, args.Path, args.Database, args.Language);
+            var item = ItemResolver.ResolveWritable(context, args.Path, args.Database, args.Language);
 
             var numbers = item.Versions.GetVersionNumbers().Select(v => v.Number).ToList();
             if (numbers.Count == 0)

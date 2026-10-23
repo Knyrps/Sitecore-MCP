@@ -42,7 +42,10 @@ namespace SitecoreMcp.Server.Tools.Items
         {
             var item = ItemResolver.Resolve(context, args.Path, args.Database, args.Language);
 
-            var links = Sitecore.Globals.LinkDatabase.GetReferences(item) ?? new Sitecore.Links.ItemLink[0];
+            // Links held in hidden fields are not listed or counted: those fields do not exist here.
+            var links = (Sitecore.Globals.LinkDatabase.GetReferences(item) ?? new Sitecore.Links.ItemLink[0])
+                .Where(link => !context.IsHiddenLinkField(link.SourceDatabaseName, link.SourceFieldID))
+                .ToArray();
             var range = Paging.Resolve(args.Offset, args.Limit, DefaultLimit, MaxLimit);
 
             var page = new JArray(links

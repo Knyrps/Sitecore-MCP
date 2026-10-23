@@ -36,9 +36,16 @@ namespace SitecoreMcp.Server.Transport
                     return;
                 }
 
-                McpRuntime.Configure(pipeline, settings);
-                RegisterRoute(settings.EndpointPath);
+                McpRuntime.Configure(pipeline, settings, configuration.EditorTokens);
+                RegisterRoute("SitecoreMcp", settings.EndpointPath, new McpRouteHandler());
                 McpLog.Info($"Endpoint registered at '{settings.EndpointPath}'.");
+
+                // The issuing endpoint exists only when a client needs editor tokens and they can be signed.
+                if (configuration.EditorTokens != null && settings.EditorTokenAudiences.Count > 0)
+                {
+                    RegisterRoute("SitecoreMcp.EditorToken", settings.EditorTokenEndpointPath, new EditorTokenRouteHandler());
+                    McpLog.Info($"Editor-token endpoint registered at '{settings.EditorTokenEndpointPath}'.");
+                }
             }
             catch (Exception ex)
             {
@@ -46,17 +53,16 @@ namespace SitecoreMcp.Server.Transport
             }
         }
 
-        private static void RegisterRoute(string endpointPath)
+        private static void RegisterRoute(string name, string path, IRouteHandler handler)
         {
             using (RouteTable.Routes.GetWriteLock())
             {
-                if (RouteTable.Routes["SitecoreMcp"] != null)
+                if (RouteTable.Routes[name] != null)
                 {
                     return;
                 }
 
-                var route = new Route(endpointPath, new McpRouteHandler());
-                RouteTable.Routes.Add("SitecoreMcp", route);
+                RouteTable.Routes.Add(name, new Route(path, handler));
             }
         }
     }

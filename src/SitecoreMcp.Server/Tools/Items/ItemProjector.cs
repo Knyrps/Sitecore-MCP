@@ -71,9 +71,10 @@ namespace SitecoreMcp.Server.Tools.Items
 
             foreach (Field field in item.Fields)
             {
-                if (!AuthorizationManager.IsAllowed(field, AccessRight.FieldRead, _context.User))
+                if (_context.IsHidden(field) ||
+                    !AuthorizationManager.IsAllowed(field, AccessRight.FieldRead, _context.User))
                 {
-                    // Omit rather than null, and don't count: a denied field's existence isn't disclosed.
+                    // Omit rather than null, and don't count: a hidden or denied field's existence isn't disclosed.
                     continue;
                 }
 

@@ -1,3 +1,5 @@
+using SitecoreMcp.Server.Security;
+
 namespace SitecoreMcp.Server.Transport
 {
     /// <summary>
@@ -12,11 +14,15 @@ namespace SitecoreMcp.Server.Transport
         /// <summary>The active settings, or null when the endpoint is disabled.</summary>
         public static McpSettings Settings { get; private set; }
 
-        /// <summary>Publishes the assembled pipeline and settings for the handler to use.</summary>
-        public static void Configure(McpRequestPipeline pipeline, McpSettings settings)
+        /// <summary>The editor-token service, or null when the endpoint is disabled or no signing secret is set.</summary>
+        public static EditorTokenService EditorTokens { get; private set; }
+
+        /// <summary>Publishes the assembled pipeline, settings, and editor-token service for the handlers to use.</summary>
+        public static void Configure(McpRequestPipeline pipeline, McpSettings settings, EditorTokenService editorTokens = null)
         {
             Pipeline = pipeline;
             Settings = settings;
+            EditorTokens = editorTokens;
         }
     }
 }

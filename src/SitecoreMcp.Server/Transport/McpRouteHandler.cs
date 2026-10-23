@@ -9,4 +9,11 @@ namespace SitecoreMcp.Server.Transport
         /// <inheritdoc />
         public IHttpHandler GetHttpHandler(RequestContext requestContext) => new McpHttpHandler();
     }
+
+    /// <summary>Supplies the editor-token issuing handler for its route.</summary>
+    public sealed class EditorTokenRouteHandler : IRouteHandler
+    {
+        /// <inheritdoc />
+        public IHttpHandler GetHttpHandler(RequestContext requestContext) => new EditorTokenHttpHandler();
+    }
 }

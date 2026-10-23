@@ -54,7 +54,10 @@ namespace SitecoreMcp.Server.Tools.Items
                 }
             }
 
-            var links = Sitecore.Globals.LinkDatabase.GetReferrers(item) ?? new ItemLink[0];
+            // Links held in hidden fields are never rewritten, and are not reported.
+            var links = (Sitecore.Globals.LinkDatabase.GetReferrers(item) ?? new ItemLink[0])
+                .Where(link => !context.IsHiddenLinkField(link.SourceDatabaseName, link.SourceFieldID))
+                .ToArray();
             if (links.Length == 0)
             {
                 return McpToolResult.Structured(new JObject
@@ -83,6 +86,9 @@ namespace SitecoreMcp.Server.Tools.Items
 
                 try
                 {
+                    // A referrer outside every content root is read-only: it is reported as failed
+                    // (it still points at this item), never silently changed or skipped.
+                    context.EnsureWritable(source);
                     var changedFields = Apply(source, linksForSource, newTarget);
                     if (changedFields.Count == 0)
                     {

@@ -42,7 +42,10 @@ namespace SitecoreMcp.Server.Tools.Items
         {
             var item = ItemResolver.Resolve(context, args.Path, args.Database, args.Language);
 
-            var links = Sitecore.Globals.LinkDatabase.GetReferrers(item) ?? new Sitecore.Links.ItemLink[0];
+            // Links held in a referrer's hidden field are not listed or counted.
+            var links = (Sitecore.Globals.LinkDatabase.GetReferrers(item) ?? new Sitecore.Links.ItemLink[0])
+                .Where(link => !context.IsHiddenLinkField(link.SourceDatabaseName, link.SourceFieldID))
+                .ToArray();
             var range = Paging.Resolve(args.Offset, args.Limit, DefaultLimit, MaxLimit);
 
             // Only the page is resolved: the total comes straight from the link count, so the impact

@@ -1,7 +1,7 @@
 # Sitecore MCP Server
 
 An [MCP](https://modelcontextprotocol.io) server that runs **inside** Sitecore as a .NET Framework
-assembly, giving an AI agent 66 tools over the real Kernel API — items, templates, presentation,
+assembly, giving an AI agent 67 tools over the real Kernel API — items, templates, presentation,
 media, search, publishing, security, and workflow — under a real Sitecore user.
 
 **Target:** Sitecore XM/XP 10.x · .NET Framework 4.8 · IIS or containers.
@@ -26,7 +26,8 @@ thin wrappers over the Kernel API, so what the agent sees is what Sitecore actua
 - **Never report success for something that did not happen.** A field that saves but reads back
   unchanged is returned in `notPersisted`; a template change that drops a value returns it in
   `dataLost` with the old value; a refused write names the reason and the alternatives.
-- **Real security, always.** Every call runs as a configured Sitecore user via `UserSwitcher`.
+- **Real security, always.** Every call runs as a real Sitecore user via `UserSwitcher` — the
+  client's configured user, or, for an editor-token client, the logged-in editor.
   `SecurityDisabler` is never used, so item and field ACLs, workflow, and auditing apply normally.
 - **Fail loudly on ambiguity.** Write arguments resolve templates, renderings, and layouts by path,
   ID, or *exact* name — never a fuzzy guess that could target the wrong item.
@@ -426,13 +427,78 @@ A client is a key, a Sitecore user, and its limits. Two decisions matter:
 Each `<client>` needs a unique `id` attribute — Sitecore's config merge collapses sibling elements
 without one, and only the last would survive.
 
+### Acting as the logged-in editor (editor tokens)
+
+A client embedded in the Content Editor — CorePilot — should act as **the editor using it**, not a
+service account, so the editor's item and field ACLs, locks, and workflow apply. Such a client is
+configured with `requiresEditorToken="true"` instead of a `user`:
+
+```xml
+<client id="corepilot"
+        keyEnvVar="SITECORE_MCP_KEY_COREPILOT"
+        requiresEditorToken="true"
+        allowWrites="true"
+        databases="master" />
+```
+
+1. When the panel opens, Sitecore issues a short-lived **editor token** for the logged-in user — an
+   HS256 JWT with issuer, audience (the client's `id`, or its `audience` attribute), expiry, the user
+   name (`sub`), and an `admin` claim. It is issued either in-process by
+   `SitecoreMcp.Server.Transport.EditorTokenIssuer.TryIssueForContextUser(...)`, or by browser code
+   with `POST /sitecore/api/sitecore-mcp/editor-token` (authenticated by the Sitecore login cookie;
+   returns `{ token, expiresAt, audience, user, header }`).
+2. The client sends it on every call as `X-Mcp-Editor-Token`, alongside its own key.
+3. Sitecore-MCP verifies it on every call and runs the call as that editor. A missing, expired,
+   tampered, or other-audience token is refused with `401` (the message says which); a token for a
+   since-deleted user is `401`, for a disabled or locked-out one `403`. The admin gate follows the
+   **live** user, not the token's claim.
+
+Rules that keep it fail-closed:
+
+- An editor-token client **cannot have a fixed user**. A `<client>` with both `requiresEditorToken`
+  and `user` is skipped with a warning, so there is no fallback identity.
+- The signing secret (32+ characters) lives in the environment variable named by
+  `Mcp.EditorToken.SecretEnvVar` (default `SITECORE_MCP_EDITOR_TOKEN_SECRET`). Unset, no token is
+  issued or accepted. Set it like any client key, to the same value on every CM instance.
+- Tokens are issued only to authenticated users of `Mcp.EditorToken.AllowedDomains` (default
+  `sitecore`), whose account is enabled and not locked out, and only for audiences of configured
+  editor-token clients.
+- Fixed-user clients are unchanged and ignore `X-Mcp-Editor-Token`.
+
+Rate limiting and the audit log key on the effective user; the audit line also records the client
+and whether the identity came from an editor token.
+
+### Content scope: content roots, search roots and hidden fields
+
+Every tool respects three optional limits, set globally inside `<sitecoreMcp>` and/or per client:
+
+| Limit | Effect |
+|---|---|
+| **Content roots** | Paths under which items may be changed. Outside every content root an item is read-only: every write tool (fields, create, move, copy destination, rename, delete, versions, locks, protection, ACLs, presentation, templates, media upload, workflow, publish, referrer updates) refuses before anything changes. `publishRelatedItems` is refused while content roots apply. |
+| **Search roots** | Paths under which `sitecore_search`, `sitecore_grep`, `sitecore_facet` and `sitecore_query_items` look. Independent of content roots. A requested `rootPath` is narrowed to the search roots; outside them the search returns nothing. |
+| **Hidden fields** | Fields (by name or ID) that are never read, found, shown or written: absent from `get_item`, templates, search/grep, references/referrers and the `change_item_template` diff. Writing one fails with the same "field not found" error as a field the template lacks; a query testing one is refused; free-text search hits that match only through a hidden field are dropped (the total is then flagged `totalIsUpperBound`). |
+
+```xml
+<contentRoots hint="list:AddContentRoot"><root>/sitecore/content/Site</root></contentRoots>
+<searchRoots hint="list:AddSearchRoot"><root>/sitecore/content/Site</root></searchRoots>
+<hiddenFields hint="list:AddHiddenField"><field>Api Key</field></hiddenFields>
+
+<client id="corepilot" ... contentRoots="/sitecore/content/Site|/sitecore/media library/Site"
+        searchRoots="/sitecore/content/Site" hiddenFields="Internal Notes" />
+```
+
+An unconfigured limit restricts nothing. A client's `contentRoots`/`searchRoots` replace the global
+lists; its `hiddenFields` add to them. `sitecore_get_context` reports the effective roots (never the
+hidden fields). A host can supply scope from elsewhere (e.g. Sitecore items) with
+`<contentScopeProvider type="..."/>` implementing `SitecoreMcp.Server.Security.IContentScopeProvider`.
+
 ### Security model
 
 | Layer | Behaviour |
 |---|---|
 | **Enablement** | `Mcp.Enabled` is `false` in the base config; no route is registered when off. |
-| **Authentication** | A key from an environment variable maps to one Sitecore user. Compared in constant time, rate-limited (30 burst, 1/sec refill by default). |
-| **Identity** | Calls run as that user via `UserSwitcher`. Item/field ACLs, workflow, and auditing apply. `SecurityDisabler` is never used. |
+| **Authentication** | A key from an environment variable maps to one client. Compared in constant time, rate-limited per effective user (30 burst, 1/sec refill by default). |
+| **Identity** | Calls run via `UserSwitcher` as the client's fixed user, or — for a `requiresEditorToken` client — as the editor named by a valid, short-lived editor token, with no fallback. Item/field ACLs, workflow, and auditing apply. `SecurityDisabler` is never used. |
 | **Writes** | Off globally *and* per client by default. Write tools are hidden from `tools/list` when either switch is off. |
 | **Databases** | Allow-listed per client. A `master`-only client cannot read `core` or publish to `web`. |
 | **Admin gate** | Schema, security, and dev/ops tools require an administrator client and are hidden from others. Config can **add** an admin requirement (`admin="true"` on a `<tool>`) but never remove one, so a config mistake cannot expose a privileged tool. |
@@ -452,11 +518,19 @@ All under `<sitecore><settings>`; patch what you need per environment.
 | `Mcp.MaxRequestBytes` | `1048576` | Request body cap — also the practical ceiling on media uploads. |
 | `Mcp.MaxConcurrentCalls` | `4` | Tool calls executed concurrently before shedding. |
 | `Mcp.MaxFieldLength` | `2000` | Field values are truncated beyond this in output. |
+| `Mcp.Images.MaxDimension` | `1024` | Longest side, in pixels, of an image returned as image content; larger images are scaled down (never up). A smaller `maxDimension` argument is honoured, a larger one is capped here. |
+| `Mcp.Images.MaxBytes` | `1048576` | Largest encoded size (before base64) of a returned image; a heavier rendering is re-rendered smaller until it fits, or refused. |
 | `Mcp.VerboseErrors` | `false` | Full error detail in responses. Development only. |
 | `Mcp.RateLimit.Capacity` | `30` | Burst size per client. |
 | `Mcp.RateLimit.RefillPerSecond` | `1` | Sustained request rate per client. |
 | `Mcp.ServerName` | `SitecoreMcp` | Name reported at `initialize`. Worth setting per environment if a client connects to several. |
 | `Mcp.ServerVersion` | `0.1.0` | Version reported at `initialize`. |
+| `Mcp.EditorToken.SecretEnvVar` | `SITECORE_MCP_EDITOR_TOKEN_SECRET` | Environment variable holding the editor-token signing secret (32+ chars). Unset disables editor tokens. |
+| `Mcp.EditorToken.Issuer` | `SitecoreMcp` | `iss` written into and required on editor tokens. |
+| `Mcp.EditorToken.LifetimeSeconds` | `900` | Editor-token lifetime (minimum 30). |
+| `Mcp.EditorToken.ClockSkewSeconds` | `60` | Tolerance on expiry and not-before. |
+| `Mcp.EditorToken.EndpointPath` | `sitecore/api/sitecore-mcp/editor-token` | Route of the issuing endpoint; registered only when an editor-token client exists and the secret is set. |
+| `Mcp.EditorToken.AllowedDomains` | `sitecore` | Domains (pipe-separated) whose users may be issued a token. |
 
 Also available: `<allowedOrigins>`, `<allowedAddresses>` (defaults to localhost — widen it for a
 shared instance), and `<trustedProxies>` for `X-Forwarded-For` handling.
@@ -467,6 +541,8 @@ shared instance), and `<trustedProxies>` for `X-Forwarded-For` handling.
 |---|---|
 | `CRYPT_E_NO_REVOCATION_CHECK`, or a self-signed certificate error | A development certificate — see [Verify](#5-verify) for the flags. Nothing to do with the module. |
 | `401` for a key that should work | The worker has not re-read its environment (app-pool env vars need a full stop/start, not a recycle), the client's `keyEnvVar` is unset, or a shell variable did not expand and the literal `$NAME` was sent. |
+| `401` "A valid editor token is required" | The client has `requiresEditorToken="true"`: send `X-Mcp-Editor-Token`. The message says whether the token was missing, expired, issued for another client, or not validly signed — or that `Mcp.EditorToken.SecretEnvVar` is unset. |
+| An editor-token client never authenticates | It was skipped at startup: it has a `user` attribute (not allowed with `requiresEditorToken`), or no `id`/`audience`. Check `mcp.log`. |
 | Only one client works | Each `<client>` needs a unique `id`; without one the config merge collapses them. |
 | Tool missing from `tools/list` | It is write-gated (check `Mcp.AllowWrites` and the client's `allowWrites`) or admin-gated (the mapped user is not an administrator). |
 | Endpoint returns HTML | The app domain is restarting, or the route is not registered — check the Sitecore log for an initialize-pipeline error. |
@@ -474,7 +550,7 @@ shared instance), and `<trustedProxies>` for `X-Forwarded-For` handling.
 
 ## Tools
 
-66 tools for an administrator client; 40 for a non-admin one (26 are admin-gated). Call
+67 tools for an administrator client; 41 for a non-admin one (26 are admin-gated). Call
 **`sitecore_get_context`** first — it reports the user, whether writes are allowed, and which
 databases and languages are available.
 
@@ -555,13 +631,25 @@ with `finalLayout: false` for the shared base.
 </details>
 
 <details>
-<summary><b>Media</b> (1)</summary>
+<summary><b>Media</b> (2)</summary>
 
 | Tool | Purpose |
 |---|---|
+| `sitecore_get_media_image` | Return a media-library image as MCP image content the model can see, resized within `Mcp.Images.*`, with its path, MIME type, dimensions and alt text. |
 | `sitecore_upload_media` | Upload a file from base64 into the media library; the extension decides the media type. Returns the item and its `mediaUrl`. |
 
-Bounded by `Mcp.MaxRequestBytes` — suited to icons and documents, not video.
+Uploads are bounded by `Mcp.MaxRequestBytes` — suited to icons and documents, not video.
+
+**Image results.** `sitecore_get_media_image` returns an MCP image content block
+(`{"type":"image","data":"<base64>","mimeType":"image/png"}`) followed by a text block, and the same
+description as `structuredContent` (`id`, `path`, `mimeType`, `width`, `height`, `originalWidth`,
+`originalHeight`, `resized`, `sizeBytes`, `limits`, and `alt` unless hidden). PNG, JPEG, GIF and
+WebP are supported; SVG and non-image media are refused. Sitecore's media pipeline does the resizing,
+so the image keeps its format. The read runs as the calling user (an editor-token client's editor),
+so an image they cannot read is "not found", and a hidden `Blob` field makes the item unreadable as
+an image. Custom tools return images through `McpToolResult.Image(bytes, mimeType, metadata)` /
+`McpContent.FromImage`; `SitecoreMcp.Server.Media.MediaImageEncoder` applies the limits to any
+resizer.
 </details>
 
 <details>
