@@ -140,7 +140,8 @@ content roots are configured every path counts as inside one root, so only right
 ## Writes (only when allowed)
 
 - **`create_item`** — parent, name, template (name/path/ID), optional initial fields. Validates the
-  name and refuses a duplicate sibling.
+  name and refuses a duplicate sibling. Starts the template's default workflow, as the Content
+  Editor does (see *New items and versions* below).
 - **`create_template`** — parent, name, optional `baseTemplates` (name/path/ID, default the Standard
   Template), `sections` (each a name plus typed `fields`), and `createStandardValues`. Field `type`
   must be an **exact** Sitecore field type (e.g. `Single-Line Text`); an unknown type is rejected
@@ -168,7 +169,8 @@ content roots are configured every path counts as inside one root, so only right
   Direct change (see above).
 - **`copy_item`** — copies **field data**, not just structure. A deep copy of a site clones *all* its
   content (hostnames, form IDs, settings). If you want "same skeleton, empty fields", copy is the
-  wrong tool — build the structure fresh. Reports `childCount`.
+  wrong tool — build the structure fresh. Reports `childCount`. Every version of the copy that has a
+  workflow is reset to its initial state (a copy of approved content is not publishable).
 - **`rename_item`** — validates the new name, refuses a sibling collision. Direct change.
 - **`delete_item`** — **recycles** by default (recoverable from the Recycle Bin). `permanent: true`
   destroys the item and its subtree irreversibly. Direct change: the preview reports descendant and
@@ -276,6 +278,54 @@ and they are the impact check to run *before* `delete_item`, `move_item`, or `re
   applies — and an unavailable command is refused **listing what is available**. The result reports
   the old and new state from a fresh read, never assuming the transition happened.
 
+## New items and versions — workflow state and statistics
+
+Every tool that creates an item or a version (`create_item`, `add_item_version`, `copy_item`,
+`upload_media`, `create_template`) leaves it as the Content Editor would: **in its workflow's
+initial state** whenever the item (`__Workflow`) or its template (`__Default workflow` on the
+standard values) names a workflow, with `__Created by` / `__Updated by` / `__Owner` set to the
+calling editor. Each result carries `workflow` (`id`, `name`, `state` with `final`, `started`: whether
+the tool had to start it, `reason`, `note`) and `statistics` (`created`, `createdBy`, `updated`,
+`updatedBy`, `owner`); a copy's `workflow` also counts `versions`, `inWorkflow` and `startedVersions`.
+`sitecore_get_context` reports the context `site` and `workflowContextEnabled`.
+
+**Why it needs doing.** Sitecore starts a workflow only while its *WorkflowContext* is enabled, and
+that follows the context site's `enableWorkflow` (Sitecore.Workflows.WorkflowContext.Enabled). The
+Content Editor runs in the `shell` site (`enableWorkflow="true"`); `/sitecore/api/...` resolves to a
+content site, where the attribute defaults to false - so a plain `Item.Add` from this endpoint created
+items with no `__Workflow state`. **An item with a workflow but no state counts as approved**
+(`Workflow.IsApproved` returns true when the state item is missing), i.e. publishable. The tools now run
+the create inside `WorkflowContextStateSwitcher(Enabled)` - Sitecore's own mechanism - and then check
+explicitly (`Tools/Workflow/WorkflowStartPolicy`, Sitecore-free and unit-tested): a version with a
+workflow and any state other than the initial one is started (`IWorkflow.Start`), one already in the
+initial state is left alone (starting again would clear its history). Nothing is started in a database
+without a workflow provider (by default every database but master), nor on standard values or branch
+items - Sitecore skips those too.
+
+**What Sitecore itself does** (decompiled Sitecore.Kernel 10.3.0 and 10.4.0; identical in both for all
+of this, except that 10.3 also gates on `Settings.Workflows.Enabled`, which is only false for a Commerce
+Server standalone edition and is deprecated in 10.4):
+
+| Operation | Workflow | Statistics, owner, lock |
+|---|---|---|
+| `Item.Add` / `ItemManager.AddFromTemplate` (data template) | `CreateItem`, then `AddVersion` for version 1; the `AddedVersion` event lets `WorkflowEngine` call `IWorkflow.Start` from `__Default workflow` - **only when WorkflowContext is enabled** (never for standard values or branch items, never without a workflow provider). Branch templates: each copied item gets version 1 the same way. | `AddVersion` sets `__Created`, `__Created by`, `__Revision`, `__Updated`, `__Updated by` (context user), `__Valid from`/`__Valid to`, and `__Owner` when the item has no own value. `__Lock` stays empty. |
+| `uiAddFromTemplate` (Content Editor insert) | `Context.Workflow.AddItem`: the same `Item.Add` in the shell site (enabled), then `StartEditing`, which for a non-admin **locks** the new item. | As above. |
+| `Versions.AddVersion` | The SQL provider copies every versioned field of the base version **except `__Workflow state`**; then `WorkflowEngine` restarts from `__Default workflow` when WorkflowContext is enabled. So a new version of an Approved item is *not* Approved - but with the context off (or only `__Workflow` set, no `__Default workflow`) it has a workflow and **no state, which is publishable**. The Content Editor's *Add version* and the automatic version on editing an approved item (`StartEditing`) both go through this with the context on: the new version lands in the initial state. | `__Created`/`__Created by`/`__Revision`/`__Updated`/`__Updated by` reset to now and the context user; `__Owner` and **`__Lock` are copied** from the base version. |
+| `Item.CopyTo` / `uiCopyItems` / duplicate | `CopyTo` copies **all** fields including `__Workflow state` (an Approved source gives an Approved copy) and no start happens. The Content Editor's copy and duplicate use `Context.Workflow.CopyItem`/`DuplicateItem`, which call `Start` on every version (all languages) of the copy and its subtree that has a workflow and state, unlock the copy, then `StartEditing`. | The SQL copy keeps the source's `__Created`, `__Created by`, `__Owner`; it skips `__Lock` (and `UnlockAfterCopy`, default true, unlocks). The `item:copied` handler saves the copy, setting `__Updated`/`__Updated by`/`__Revision`. |
+| `MediaCreator` | Adds the media item with `Item.Add` (or, on overwrite, removes all versions and calls `AddVersion`) under a `SecurityDisabler`: the workflow starts only when WorkflowContext is enabled. | As `Item.Add`; the context user (the editor - `SecurityDisabler` does not switch user) is `__Created by`. |
+
+`IWorkflow.Start` clears the version's workflow history, writes `__Workflow` and `__Workflow state`
+(initial state) through a normal save (so `__Updated`/`__Updated by`/`__Revision` change), adds the
+"Item created" history entry and runs the initial state's actions. It never touches `__Lock`.
+
+**Deliberate differences from the Content Editor.** The tools do not lock what they create (the
+Content Editor's `StartEditing` locks a non-admin's new item; use `lock_item`). Where the Content
+Editor would leave a version with a workflow but no state - a new version of an item with only
+`__Workflow` set, or a copy of an item that was never started - the tools start it, since that state
+is publishable. While the create runs with WorkflowContext enabled, workflow-state write security
+applies, as it does in the Content Editor: a user may be refused a new version of an item whose state
+denies them write.
+
 ## Structure changes — template swaps, inheritance, versions
 
 - **`change_item_template`** — swaps an item's template. Sitecore carries values across by matching
@@ -287,6 +337,7 @@ and they are the impact check to run *before* `delete_item`, `move_item`, or `re
   (re-adding the base restores them). Removing a non-base fails listing the current bases.
 - **`add_item_version`** — new version in a language; `sourceLanguage` seeds it with another
   language's latest field values (a translation starting point — shared and `__` fields excluded).
+  The new version starts in its workflow's initial state, never in a copied approved state.
 - **`remove_item_version`** — remove one version (`version`, default latest). Removing the last
   version means the item stops existing in that language, and the result says so.
 - **`query_items`** — Sitecore query (XPath-like axes, `fast:` supported) for structural lookups that
