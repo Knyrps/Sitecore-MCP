@@ -5,6 +5,7 @@ using Sitecore.Data.Items;
 using SitecoreMcp.Server.Protocol;
 using SitecoreMcp.Server.Schema;
 using SitecoreMcp.Server.Tools.Items;
+using SitecoreMcp.Server.Tools.Workflow;
 
 namespace SitecoreMcp.Server.Tools.Templates
 {
@@ -80,17 +81,25 @@ namespace SitecoreMcp.Server.Tools.Templates
             var baseTemplates = ResolveBaseTemplates(db, args.BaseTemplates);
             TemplateBuilder.Validate(args.Sections);
 
-            var template = new TemplateItem(parent.Add(args.Name, new TemplateID(TemplateIDs.Template)));
+            // Created as the Content Editor would (WorkflowContext enabled), then checked: a template, section or field
+            // whose template names a default workflow starts in it; standard values never do.
+            var template = new TemplateItem(ItemWorkflow.Run(() => parent.Add(args.Name, new TemplateID(TemplateIDs.Template))));
 
             Item standardValues = null;
+            IReadOnlyList<WorkflowOutcome> outcomes;
             try
             {
                 TemplateBuilder.SetBaseTemplates(template.InnerItem, baseTemplates);
-                TemplateBuilder.AddSections(template, args.Sections);
-                if (args.CreateStandardValues)
+                using (ItemWorkflow.Scope())
                 {
-                    standardValues = TemplateBuilder.CreateStandardValues(template);
+                    TemplateBuilder.AddSections(template, args.Sections);
+                    if (args.CreateStandardValues)
+                    {
+                        standardValues = TemplateBuilder.CreateStandardValues(template);
+                    }
                 }
+
+                outcomes = ItemWorkflow.EnsureTree(template.InnerItem, ItemCreationKind.NewItem, deep: true);
             }
             catch
             {
@@ -99,8 +108,9 @@ namespace SitecoreMcp.Server.Tools.Templates
                 throw;
             }
 
-            return McpToolResult.Structured(
-                TemplateDescriber.DescribeStructure(template.InnerItem, baseTemplates, standardValues, context.Scope));
+            var result = TemplateDescriber.DescribeStructure(template.InnerItem, baseTemplates, standardValues, context.Scope);
+            result["workflow"] = ItemWorkflow.Summary(outcomes, template.InnerItem);
+            return McpToolResult.Structured(result);
         }
 
         private static IReadOnlyList<Item> ResolveBaseTemplates(Database db, string[] references)

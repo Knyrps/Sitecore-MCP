@@ -54,7 +54,11 @@ namespace SitecoreMcp.Server.Tools.Items
                 ["databases"] = databases,
                 ["languages"] = languages,
                 ["contentRoots"] = RootsOrNull(context.Scope.ContentRoots),
-                ["searchRoots"] = RootsOrNull(context.Scope.SearchRoots)
+                ["searchRoots"] = RootsOrNull(context.Scope.SearchRoots),
+                // The context site the endpoint resolved to and whether its WorkflowContext is on. Off means Sitecore
+                // itself would not start workflows here; the create tools enable it for the create and check after.
+                ["site"] = Sitecore.Context.Site?.Name,
+                ["workflowContextEnabled"] = Sitecore.Context.Workflow?.Enabled ?? false
             });
         }
 

@@ -5,6 +5,7 @@ using Sitecore.Data.Items;
 using SitecoreMcp.Server.Protocol;
 using SitecoreMcp.Server.Schema;
 using SitecoreMcp.Server.Tools.Templates;
+using SitecoreMcp.Server.Tools.Workflow;
 
 namespace SitecoreMcp.Server.Tools.Items
 {
@@ -48,7 +49,9 @@ namespace SitecoreMcp.Server.Tools.Items
         /// <inheritdoc />
         public override string Description =>
             "Create a new Sitecore item under a parent, from a template. Optionally set initial field " +
-            "values. Fails if the name is invalid or a sibling with that name already exists.";
+            "values. Fails if the name is invalid or a sibling with that name already exists. As in the " +
+            "Content Editor, an item whose template has a default workflow starts in that workflow's " +
+            "initial state; the result reports 'workflow' (its state) and 'statistics' (created by, owner).";
 
         /// <inheritdoc />
         protected override McpToolResult Execute(CreateItemArgs args, McpCallContext context)
@@ -63,7 +66,16 @@ namespace SitecoreMcp.Server.Tools.Items
             }
 
             var templateItem = TemplateResolver.Resolve(parent.Database, args.Template, allowPartial: false);
-            var created = parent.Add(args.Name, new TemplateID(templateItem.ID));
+            // Sitecore starts the workflow on a new item only with the WorkflowContext enabled (the Content Editor's
+            // shell site); then check, and start it where Sitecore did not.
+            var created = ItemWorkflow.Run(() => parent.Add(args.Name, new TemplateID(templateItem.ID)));
+            if (created == null)
+            {
+                throw new McpToolException($"Sitecore did not create '{args.Name}' under '{parent.Paths.FullPath}' (the user may lack create access).");
+            }
+
+            var workflow = ItemWorkflow.Ensure(created, ItemCreationKind.NewItem);
+            created = workflow.Version;
             FieldWriteResult write = null;
             if (args.Fields != null && args.Fields.Count > 0)
             {
@@ -71,6 +83,8 @@ namespace SitecoreMcp.Server.Tools.Items
             }
 
             var projection = new ItemProjector(context).ProjectWithFields(created, null);
+            projection["workflow"] = workflow.ToJson();
+            projection["statistics"] = ItemWorkflow.Statistics(created, context);
             if (write != null && write.NotPersisted.Count > 0)
             {
                 projection["notPersisted"] = new JArray(write.NotPersisted);

@@ -167,6 +167,7 @@ through the contract theories, so each one appears as its own test result.
 | `Tools/ToolRegistrationTests` | Config and code agree: nothing unregistered, nothing registered that does not exist, no duplicates. |
 | `Protocol/`, `Schema/`, `Transport/` | JSON-RPC envelope, version negotiation, dispatch, schema generation, gates, rate limiting, constant-time key comparison. |
 | `Portable.Tests/Security` | Editor tokens: issued token round-trips; missing, malformed, expired, not-yet-valid, wrong-issuer, wrong-audience, other-secret, tampered, and `alg: none` tokens are refused; issue policy (audience, domains). |
+| `Portable.Tests/Tools/WorkflowStartPolicyTests` | Whether a created item, version or copy is started in its workflow: no state, a final state or a copied state is started; the initial state is left alone; nothing without a workflow, in a database without a workflow provider, or on standard values/branch items; the item's own `__Workflow` wins over `__Default workflow`. |
 | `Portable.Tests/Transport` | Effective identity per request: an editor-token client runs as the token's editor and is refused without a valid token (or without a configured secret); fixed-user clients run as their user and ignore editor tokens. Client config rules: an editor-token client cannot have a fixed user. |
 
 The permission sets are deliberately spelled out rather than derived. They are security decisions, so
@@ -205,6 +206,30 @@ the app pool and a `corepilot` client (`requiresEditorToken="true"`, no `user`) 
 The unit tests cover the Sitecore-independent parts (protocol, schema generation, gates, paging).
 Anything touching the Kernel needs a live instance: deploy, then exercise the tool over HTTP or
 through an MCP client and confirm the result against a separate read.
+
+### Manual check: created items enter their workflow (10.3 and 10.4)
+
+The policy is unit-tested; only an instance proves Sitecore applies it. On master, with a template
+whose standard values set `__Default workflow` to the Sample Workflow (initial state Draft, final
+state Approved), calling as a non-admin editor:
+
+1. `sitecore_get_context` — note `site` (not `shell`) and `workflowContextEnabled: false`: Sitecore
+   on its own would not start workflows on this endpoint.
+2. `sitecore_create_item` from that template — result `workflow.state.displayName` is `Draft`;
+   `statistics.createdBy` and `statistics.owner` are the editor. In the Content Editor, the item's
+   Workflow section shows Draft and the Quick Info shows the editor as creator and owner.
+3. Approve the item (`sitecore_invoke_workflow` Submit then Approve), then `sitecore_add_item_version`
+   — the new version is in `Draft` (`workflow.started` may be false: Sitecore started it), the previous
+   version stays Approved, and a publish of the item publishes the approved version only.
+4. `sitecore_copy_item` of the approved item — every version of the copy is in `Draft`
+   (`workflow.inWorkflow` equals `workflow.versions`).
+5. `sitecore_upload_media` into a media folder whose media template has a default workflow — the
+   media item is in the initial state.
+6. A dictionary item (`/sitecore/templates/System/Dictionary/Dictionary entry`, or the site's own
+   dictionary entry template) with a default workflow, created under a dictionary folder — Draft, as
+   in the Content Editor.
+7. The same create in the `web` database (if the client may write there) starts nothing
+   (`workflow.reason: workflowsUnavailable`).
 
 Two habits that repeatedly caught real bugs:
 

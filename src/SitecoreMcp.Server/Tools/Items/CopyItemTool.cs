@@ -2,6 +2,7 @@ using Sitecore.Data;
 using SitecoreMcp.Server.Protocol;
 using SitecoreMcp.Server.Schema;
 using SitecoreMcp.Server.Security;
+using SitecoreMcp.Server.Tools.Workflow;
 
 namespace SitecoreMcp.Server.Tools.Items
 {
@@ -37,7 +38,9 @@ namespace SitecoreMcp.Server.Tools.Items
         public override string Description =>
             "Copy a Sitecore item to a new parent, by default including its descendants. Fails if the " +
             "destination already has a child with the target name, if the destination is in another content " +
-            "root, or if the editor may not create items under the destination.";
+            "root, or if the editor may not create items under the destination. As in the Content Editor, " +
+            "every version of the copy (and its copied descendants) that has a workflow is reset to the " +
+            "workflow's initial state, so a copy of approved content is not publishable; see 'workflow' in the result.";
 
         /// <inheritdoc />
         protected override McpToolResult Execute(CopyItemArgs args, McpCallContext context)
@@ -54,13 +57,10 @@ namespace SitecoreMcp.Server.Tools.Items
 
             RelocationGuard.Ensure(context, RelocationKind.Copy, item, destination);
 
+            Sitecore.Data.Items.Item copy;
             try
             {
-                var copy = item.CopyTo(destination, name, ID.NewID, deep);
-                var result = new ItemProjector(context).ProjectSummary(copy);
-                result["childCount"] = copy.Children.Count;
-                result["deep"] = deep;
-                return McpToolResult.Structured(result);
+                copy = item.CopyTo(destination, name, ID.NewID, deep);
             }
             catch (System.Exception ex)
             {
@@ -71,6 +71,17 @@ namespace SitecoreMcp.Server.Tools.Items
                     : string.Empty;
                 return McpToolResult.Failure($"Copy failed: {ex.Message}.{note}");
             }
+
+            // A copy keeps its source's workflow state (an approved source gives a publishable copy). The Content
+            // Editor's copy (WorkflowContext.CopyItem) restarts the workflow of every version of the copy and its
+            // subtree; do the same.
+            var outcomes = ItemWorkflow.EnsureTree(copy, ItemCreationKind.Copy, deep);
+            var result = new ItemProjector(context).ProjectSummary(copy);
+            result["childCount"] = copy.Children.Count;
+            result["deep"] = deep;
+            result["workflow"] = ItemWorkflow.Summary(outcomes, copy);
+            result["statistics"] = ItemWorkflow.Statistics(copy, context);
+            return McpToolResult.Structured(result);
         }
     }
 }

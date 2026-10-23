@@ -4,6 +4,7 @@ using Newtonsoft.Json.Linq;
 using Sitecore.Resources.Media;
 using SitecoreMcp.Server.Protocol;
 using SitecoreMcp.Server.Schema;
+using SitecoreMcp.Server.Tools.Workflow;
 
 namespace SitecoreMcp.Server.Tools.Items
 {
@@ -115,13 +116,18 @@ namespace SitecoreMcp.Server.Tools.Items
             Sitecore.Data.Items.Item created;
             using (var stream = new MemoryStream(bytes))
             {
-                created = MediaManager.Creator.CreateFromStream(stream, args.FileName, options);
+                // The media creator adds the item through Item.Add: Sitecore starts a workflow on it only with the
+                // WorkflowContext enabled, as in the Content Editor's upload.
+                created = ItemWorkflow.Run(() => MediaManager.Creator.CreateFromStream(stream, args.FileName, options));
             }
 
             if (created == null)
             {
                 throw new McpToolException("Sitecore did not create the media item.");
             }
+
+            var outcomes = ItemWorkflow.EnsureTree(created, ItemCreationKind.NewItem, deep: false);
+            created = created.Database.GetItem(created.ID, created.Language) ?? created;
 
             // MediaCreatorOptions.AlternateText does not reliably reach the Alt field on an
             // unversioned item, so write it explicitly when the template has one.
@@ -138,7 +144,9 @@ namespace SitecoreMcp.Server.Tools.Items
                 ["template"] = created.TemplateName,
                 ["sizeBytes"] = bytes.Length,
                 ["extension"] = created["Extension"],
-                ["mediaUrl"] = MediaManager.GetMediaUrl(created)
+                ["mediaUrl"] = MediaManager.GetMediaUrl(created),
+                ["workflow"] = ItemWorkflow.Summary(outcomes, created),
+                ["statistics"] = ItemWorkflow.Statistics(created, context)
             });
         }
     }

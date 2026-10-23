@@ -5,6 +5,7 @@ using Newtonsoft.Json.Linq;
 using Sitecore.Data.Fields;
 using SitecoreMcp.Server.Protocol;
 using SitecoreMcp.Server.Schema;
+using SitecoreMcp.Server.Tools.Workflow;
 
 namespace SitecoreMcp.Server.Tools.Items
 {
@@ -33,17 +34,25 @@ namespace SitecoreMcp.Server.Tools.Items
             "Add a new version of a Sitecore item in a language ('language' selects which). Pass " +
             "sourceLanguage to seed the new version with that language's latest field values (a " +
             "translation starting point); otherwise the new version starts from the target language's " +
-            "latest. Reports the created version number and any copied fields.";
+            "latest. Reports the created version number and any copied fields. As in the Content Editor, " +
+            "the new version starts in its workflow's initial state (never in a copied approved state); " +
+            "the result reports 'workflow' and 'statistics'.";
 
         /// <inheritdoc />
         protected override McpToolResult Execute(AddItemVersionArgs args, McpCallContext context)
         {
             var item = ItemResolver.ResolveWritable(context, args.Path, args.Database, args.Language);
-            var created = item.Versions.AddVersion();
+            // As in the Content Editor: Sitecore restarts the workflow on a new version only with the WorkflowContext
+            // enabled, and its SQL provider copies every versioned field except __Workflow state. Then check: a version
+            // with a workflow but no state, or a final one, would be publishable.
+            var created = ItemWorkflow.Run(() => item.Versions.AddVersion());
             if (created == null)
             {
-                throw new McpToolException("Sitecore did not create a new version (the user may lack version-write access).");
+                throw new McpToolException("Sitecore did not create a new version (the user may lack version-write access, including the workflow state's).");
             }
+
+            var workflow = ItemWorkflow.Ensure(created, ItemCreationKind.NewVersion);
+            created = workflow.Version;
 
             var copied = new List<string>();
             if (!string.IsNullOrWhiteSpace(args.SourceLanguage))
@@ -80,7 +89,9 @@ namespace SitecoreMcp.Server.Tools.Items
                 ["item"] = created.Paths.FullPath,
                 ["language"] = created.Language.Name,
                 ["version"] = created.Version.Number,
-                ["versionsInLanguage"] = created.Versions.GetVersionNumbers().Length
+                ["versionsInLanguage"] = created.Versions.GetVersionNumbers().Length,
+                ["workflow"] = workflow.ToJson(),
+                ["statistics"] = ItemWorkflow.Statistics(created, context)
             };
             if (!string.IsNullOrWhiteSpace(args.SourceLanguage))
             {
