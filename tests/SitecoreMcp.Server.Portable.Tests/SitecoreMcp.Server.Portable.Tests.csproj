@@ -32,6 +32,7 @@
     <Compile Include="..\..\src\SitecoreMcp.Server\Protocol\McpToolResult.cs" Link="Linked\Protocol\McpToolResult.cs" />
     <Compile Include="..\..\src\SitecoreMcp.Server\Tools\Confirmation\*.cs" Link="Linked\Tools\Confirmation\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\SitecoreMcp.Server\Tools\Workflow\WorkflowStartPolicy.cs" Link="Linked\Tools\Workflow\WorkflowStartPolicy.cs" />
+    <Compile Include="..\..\src\SitecoreMcp.Server\Tools\Search\NameTerms.cs" Link="Linked\Tools\Search\NameTerms.cs" />
     <Compile Include="..\SitecoreMcp.Server.Tests\Support\FakeHttpRequest.cs" Link="Support\FakeHttpRequest.cs" />
     <!-- The pre-existing key-authentication tests, so fixed-user behaviour is pinned off Windows too. -->
     <Compile Include="..\SitecoreMcp.Server.Tests\Transport\McpAuthenticatorTests.cs" Link="Existing\McpAuthenticatorTests.cs" />
