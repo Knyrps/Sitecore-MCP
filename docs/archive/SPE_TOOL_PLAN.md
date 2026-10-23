@@ -9,7 +9,7 @@ planning document, not an implementation — nothing here is built yet.
 **Collapse every `-by-id` / `-by-path` pair into one tool.** SPE splits almost every operation into
 two cmdlets that differ only in how the target is identified. This server already solves that with
 one convention: `ItemQueryArgs`/`ItemResolver` accept a single `path` that may be a path or an ID
-in braces (see [TOOL_GUIDE.md](TOOL_GUIDE.md)). Every adaptation below follows that pattern instead
+in braces (see [TOOL_GUIDE.md](../TOOL_GUIDE.md)). Every adaptation below follows that pattern instead
 of shipping id/path twins — this alone is the single biggest reduction in tool count.
 
 **Exclude session- and current-user-scoped tools.** This server is stateless and per-call
