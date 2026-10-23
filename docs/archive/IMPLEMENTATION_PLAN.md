@@ -19,7 +19,7 @@ Sitecore Kernel APIs it wraps, behavior, safety/edge cases, and result shape.
 
 Everything marked Done shipped with live verification on the knh instance; per-tool notes and any
 deviations from this spec are recorded in the corresponding commit messages and
-[TOOL_GUIDE.md](TOOL_GUIDE.md). Two additions not in the original spec landed during implementation:
+[TOOL_GUIDE.md](../TOOL_GUIDE.md). Two additions not in the original spec landed during implementation:
 the per-tool **admin gate** (`RequiresAdmin` + a one-directional `admin="true"` config attribute that
 can tighten but never loosen), and the bridge's JSON-only stdout guarantee.
 
