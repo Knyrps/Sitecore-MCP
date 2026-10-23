@@ -25,8 +25,8 @@ namespace SitecoreMcp.Server.Tools.Search
         [McpParam(Description = "Find items by exact item name (the surest way to locate an item by name).")]
         public string Name { get; set; }
 
-        /// <summary>Find items whose item name contains this substring.</summary>
-        [McpParam(Description = "Find items whose item name contains this substring.")]
+        /// <summary>Find items whose item name contains this substring; with several words, every word.</summary>
+        [McpParam(Description = "Find items whose item name contains this substring; with several words, the name must contain every word.")]
         public string NameContains { get; set; }
 
         /// <summary>Restrict to items of a given template, by path, ID, or name.</summary>
@@ -295,10 +295,11 @@ namespace SitecoreMcp.Server.Tools.Search
                 query = query.Where(i => i.Name == name);
             }
 
-            if (!string.IsNullOrEmpty(args.NameContains))
+            // Every word must be in the name (NameTerms): one Contains with several words matches any of them in Solr.
+            foreach (var term in NameTerms.Split(args.NameContains))
             {
-                var nameContains = args.NameContains;
-                query = query.Where(i => i.Name.Contains(nameContains));
+                var word = term;
+                query = query.Where(i => i.Name.Contains(word));
             }
 
             if (!string.IsNullOrEmpty(args.Template))

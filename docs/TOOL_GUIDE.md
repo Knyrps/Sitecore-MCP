@@ -67,7 +67,7 @@ are real security outcomes, not tool bugs.
 
 | You want | Tool |
 |---|---|
-| An item by exact / partial **name** | `sitecore_search { name }` / `{ nameContains }` |
+| An item by exact / partial **name** | `sitecore_search { name }` / `{ nameContains }` (several words: every word must be in the name) |
 | An item by **path or ID** | `sitecore_get_item` |
 | **Children** / **ancestors** | `sitecore_get_children` / `sitecore_get_ancestors` |
 | Items mentioning a **word** (indexed content) | `sitecore_search { text }` |
