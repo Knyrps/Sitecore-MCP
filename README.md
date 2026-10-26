@@ -1,724 +1,234 @@
 # Sitecore MCP Server
 
-An [MCP](https://modelcontextprotocol.io) server that runs **inside** Sitecore as a .NET Framework
-assembly, giving an AI agent 67 tools over the real Kernel API — items, templates, presentation,
-media, search, publishing, security, and workflow — under a real Sitecore user.
+An [MCP](https://modelcontextprotocol.io) server that runs **inside** Sitecore as a .NET Framework assembly. It gives an
+AI agent 67 tools over the real Kernel API (items, templates, presentation, media, search, publishing, security and
+workflow), and every call runs as a real Sitecore user, so item and field ACLs, locks, workflow and auditing apply.
 
-**Target:** Sitecore XM/XP 10.x · .NET Framework 4.8 · IIS or containers.
-Developed and continuously verified against 10.3 (Kernel 18.0.0.0); builds against 10.4
-(Kernel 19.0.0.0), which needs its own build — see [Installing](#installing).
+**Target:** Sitecore XM/XP 10.3 and 10.4, CM role only · .NET Framework 4.8 · IIS or containers.
 
-> Working on the server itself? See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
-
-## Why in-process
-
-Existing Sitecore integrations — the Sitecore CLI, PowerShell Remoting, the Item Service, GraphQL —
-sit outside the platform and reach in over the network. That means a second runtime to install and
-version, an extra hop, a DTO layer that drifts from the real item model, and whatever permission
-model the chosen API happened to expose.
-
-This module is a DLL in your instance's `/bin`. It gets `Sitecore.Data.Database`, `Sitecore.Context`,
-the real security model, and the publishing and indexing pipelines as **in-process calls**. Tools are
-thin wrappers over the Kernel API, so what the agent sees is what Sitecore actually does.
-
-### Design principles
-
-- **Never report success for something that did not happen.** A field that saves but reads back
-  unchanged is returned in `notPersisted`; a template change that drops a value returns it in
-  `dataLost` with the old value; a refused write names the reason and the alternatives.
-- **Real security, always.** Every call runs as a real Sitecore user via `UserSwitcher` — the
-  client's configured user, or, for an editor-token client, the logged-in editor.
-  `SecurityDisabler` is never used, so item and field ACLs, workflow, and auditing apply normally.
-- **Fail loudly on ambiguity.** Write arguments resolve templates, renderings, and layouts by path,
-  ID, or *exact* name — never a fuzzy guess that could target the wrong item.
-
-## Architecture
+- Using the tools well (and what each one does): [docs/TOOL_GUIDE.md](docs/TOOL_GUIDE.md)
+- Working on the server itself: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)
 
 ```
-MCP client (Claude Code, Claude Desktop, VS Code, opencode)
-      │  stdio JSON-RPC
+MCP client (Claude Code, VS Code, opencode, CorePilot, ...)
+      │  Streamable HTTP, or stdio through the optional bridge
       ▼
-sitecore-mcp-bridge         ← optional: only for stdio-only clients, or instances
-      │                       whose self-signed cert Node/Bun runtimes reject
-      │  HTTPS POST /sitecore/api/mcp   (Authorization: Bearer <key>)
+POST https://cm.example.com/sitecore/api/mcp   (X-Mcp-Key: <key>  or  Authorization: Bearer <key>)
       ▼
-SitecoreMcp.Server.dll  — in the CM worker process
-      │  in-process Kernel API, as the caller's real Sitecore user
-      ▼
-Sitecore
+SitecoreMcp.Server.dll in the CM worker process  →  Sitecore Kernel API, as the caller's Sitecore user
 ```
 
-Clients that speak Streamable HTTP connect to the endpoint directly and skip the bridge.
+**Deploy it to Content Management only.** It is an authoring surface; CD servers must never expose it.
 
-**Deploy it to Content Management only.** It is an authoring and development surface; CD servers
-should never expose it. The config supports Sitecore's role scoping, so a single patch can enforce
-that across a topology (see [Deploying](#deploying)).
+## Install
 
-## Requirements
+### 1. Build for your Sitecore version
 
-| | |
-|---|---|
-| **Sitecore** | XM or XP 10.x, on the CM role |
-| **Runtime** | .NET Framework 4.8 (the instance's own) |
-| **Build-time** | .NET SDK, once, to produce the assembly for your Sitecore version |
-| **Client-side** | .NET 8 runtime only if you use the stdio bridge |
-
-The assembly binds to the exact `Sitecore.Kernel` your instance runs, so **10.3 and 10.4 need
-different builds**. Produce one artifact per Sitecore version you target and reuse it across the
-environments running that version.
-
-## Installing
-
-### 1. Produce the artifact
-
-Point the build at any instance running your target Sitecore version — a gitignored
-`Directory.Build.user.props` at the repo root:
+The assembly binds to the exact `Sitecore.Kernel` it was built against (10.3 = 18.0.0.0, 10.4 = 19.0.0.0), so build once
+per Sitecore version. Point the build at any instance of that version in a gitignored `Directory.Build.user.props`:
 
 ```xml
-<Project>
-  <PropertyGroup>
-    <SitecoreWebRoot>C:\inetpub\wwwroot\my-instance</SitecoreWebRoot>
-  </PropertyGroup>
-</Project>
+<Project><PropertyGroup><SitecoreWebRoot>C:\inetpub\wwwroot\my-instance</SitecoreWebRoot></PropertyGroup></Project>
 ```
 
 ```powershell
 dotnet build src/SitecoreMcp.Server -c Release
 ```
 
-That produces the two files you ship:
+You ship two files: `src/SitecoreMcp.Server/bin/Release/SitecoreMcp.Server.dll` (to `bin/`) and
+`src/SitecoreMcp.Server/App_Config/Include/SitecoreMcp/SitecoreMcp.config` (to `App_Config/Include/SitecoreMcp/`).
+Deploy them the way you deploy everything else (solution publish, Dockerfile `COPY` layer on the CM image, App Service
+artifacts). Nothing is written to the database, so rollback is deleting the two files.
 
-```
-src/SitecoreMcp.Server/bin/Release/SitecoreMcp.Server.dll
-src/SitecoreMcp.Server/App_Config/Include/SitecoreMcp/SitecoreMcp.config
-```
+> **Using CorePilot?** Its release package installs Sitecore-MCP with it and writes the client config below for you.
+> See CorePilot's `docs/sitecore-package.md`.
 
-Version the artifact by Sitecore version (e.g. `SitecoreMcp-10.3.zip`) and publish it to wherever
-your team keeps build outputs. This is a one-time step per Sitecore version, not per deployment.
+### 2. Enable it per environment
 
-### 2. Deploy through your normal mechanism
-
-The module is an ordinary Sitecore extension: **one assembly into `/bin`, one config into
-`App_Config/Include`**. Use whatever already delivers code to your instances.
-
-| Topology | How it lands |
-|---|---|
-| **On-prem / IIS** | Include the two files in your solution's publish output or deployment package, so they deploy with everything else. |
-| **Containers** | Add a `COPY` layer to your **CM** Dockerfile — the assembly to `/bin`, the config to `App_Config/Include/SitecoreMcp/`. |
-| **Azure PaaS** | Ship alongside your CM App Service artifacts. |
-| **Sitecore package** | Wrap both files in a `.zip`/`.update` for the Installation Wizard if that is your convention. |
-
-Nothing is written to the database and no items are installed, so deployment is just file copy and
-rollback is deleting the two files.
-
-### 3. Configure it
-
-The shipped `SitecoreMcp.config` is **safe by default**: the endpoint is disabled, HTTPS is required,
-writes are off, and no clients are defined. A disabled instance registers no route and behaves
-exactly like one without the module.
-
-Enabling is a **separate environment patch** you own — keep it out of the base config so it can
-differ per environment and never leaks to production by accident. Create
-`App_Config/Include/zzz/SitecoreMcp.Environment.config`:
+The shipped config is safe by default: endpoint off, HTTPS required, writes off, no clients. Enable it in a separate
+environment patch you own, e.g. `App_Config/Include/zzz/SitecoreMcp.Environment.config`:
 
 ```xml
-<?xml version="1.0" encoding="utf-8"?>
-<configuration xmlns:patch="http://www.sitecore.net/xmlconfig/"
-               xmlns:role="http://www.sitecore.net/xmlconfig/role/">
+<configuration xmlns:patch="http://www.sitecore.net/xmlconfig/" xmlns:role="http://www.sitecore.net/xmlconfig/role/">
   <sitecore role:require="Standalone or ContentManagement">
-
     <settings>
-      <setting name="Mcp.Enabled">
-        <patch:attribute name="value">true</patch:attribute>
-      </setting>
-      <setting name="Mcp.AllowWrites">
-        <patch:attribute name="value">true</patch:attribute>
-      </setting>
+      <setting name="Mcp.Enabled"><patch:attribute name="value">true</patch:attribute></setting>
+      <setting name="Mcp.AllowWrites"><patch:attribute name="value">true</patch:attribute></setting>
     </settings>
-
     <sitecoreMcp>
       <clients>
-        <!-- One client per person or purpose. The key lives in an environment
-             variable named here - never in this file. -->
-        <client id="alice"
-                keyEnvVar="SITECORE_MCP_KEY_ALICE"
-                user="sitecore\svc-mcp-alice"
-                allowWrites="true"
-                databases="master" />
+        <!-- One client per person or purpose; the key lives in the environment variable named here. -->
+        <client id="alice" keyEnvVar="SITECORE_MCP_KEY_ALICE" user="sitecore\svc-mcp-alice"
+                allowWrites="true" databases="master" />
       </clients>
     </sitecoreMcp>
-
   </sitecore>
 </configuration>
 ```
 
-`role:require` means the same patch can ship everywhere and only activate on CM.
+Each `<client>` needs a unique `id` (Sitecore's config merge collapses siblings without one). Give each person their own
+client so the audit log means something, and scope the mapped **Sitecore user's** rights; `allowWrites` and `databases`
+are a coarser fence on top. For a client embedded in the Content Editor, see [Editor tokens](#editor-tokens).
 
-### 4. Set the keys
+### 3. Set the key
 
-A key is any high-entropy secret. It is read from the environment variable named by the client's
-`keyEnvVar` **at application start** — never from config, so it stays out of source control.
+Keys are read from the environment variable named by `keyEnvVar` **at application start**, never from config. Generate
+one per client (`-join ((1..32 | % { '{0:x2}' -f (Get-Random -Max 256) }))`) and set it on the CM process:
 
-Generate one per client:
+| Host | How |
+|---|---|
+| IIS | App-pool environment variable (IIS Manager > app pool > Advanced Settings > Environment Variables, or `Add-WebConfigurationProperty` on `system.applicationHost/applicationPools/add[@name='<pool>']/environmentVariables`). Then **stop and start** the pool; a recycle does not re-read the environment. |
+| Docker / Kubernetes | A container environment variable from an `.env` file or a secret. |
+| Azure App Service | An application setting (a Key Vault reference works). |
 
-```powershell
-# 64 hex characters
--join ((1..32 | ForEach-Object { '{0:x2}' -f (Get-Random -Max 256) }))
-```
+A client whose variable is unset is silently disabled. That is the first thing to check when a key returns `401`.
 
-<details>
-<summary><b>IIS</b> — app-pool environment variables</summary>
+### 4. Verify
 
-Set it on the **app pool**, so it is scoped to the worker process rather than the whole machine.
-Use the `WebAdministration` cmdlets — `appcmd`'s nested-collection syntax silently no-ops on an
-existing entry:
-
-```powershell
-Import-Module WebAdministration
-$pool = 'my-site'
-$col  = "system.applicationHost/applicationPools/add[@name='$pool']/environmentVariables"
-
-Add-WebConfigurationProperty -pspath 'MACHINE/WEBROOT/APPHOST' -filter $col -name '.' `
-  -value @{ name = 'SITECORE_MCP_KEY_ALICE'; value = '<key>' }
-```
-
-Then **fully restart the pool** — a recycle does not re-read the process environment:
+Call `sitecore_get_context`. It confirms the key, the resolved user, whether writes are allowed, the databases, the
+content scope, and whether Sitecore's workflow context is on for these requests:
 
 ```powershell
-Stop-WebAppPool  -Name $pool
-Start-WebAppPool -Name $pool
+$body = '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"sitecore_get_context","arguments":{}}}'
+Invoke-RestMethod -Method Post -Uri 'https://cm.example.com/sitecore/api/mcp' -ContentType 'application/json' `
+  -Headers @{ 'X-Mcp-Key' = $env:SITECORE_MCP_KEY_ALICE; 'MCP-Protocol-Version' = '2025-06-18' } -Body $body
 ```
 
-Read it back to confirm:
+Against a dev certificate add `-SkipCertificateCheck` (PowerShell 7), or `-k --ssl-no-revoke` with curl. Then check
+`App_Data/logs/mcp.log.<date>.txt` for `Endpoint registered` and the matching `AUDIT` line.
+
+## Connect a client
+
+Clients that speak Streamable HTTP connect to the endpoint directly with the key header. For stdio-only clients, or a
+local instance whose self-signed certificate Node/Bun rejects, use the bridge, which trusts the Windows certificate store:
 
 ```powershell
-Get-WebConfiguration -pspath 'MACHINE/WEBROOT/APPHOST' -filter "$col/add" |
-  Select-Object name, value
+dotnet publish src/SitecoreMcp.Bridge -c Release   # -> .../net8.0/win-x64/publish/sitecore-mcp-bridge.exe
 ```
-</details>
-
-<details>
-<summary><b>Docker Compose</b></summary>
-
-Keep the value in an `.env` file (gitignored) and reference it, so it never enters the compose file:
-
-```yaml
-services:
-  cm:
-    environment:
-      SITECORE_MCP_KEY_ALICE: ${SITECORE_MCP_KEY_ALICE}
-```
-
-```ini
-# .env  (gitignored)
-SITECORE_MCP_KEY_ALICE=<key>
-```
-</details>
-
-<details>
-<summary><b>Kubernetes</b> — secret into the CM pod</summary>
-
-```bash
-kubectl create secret generic sitecore-mcp-keys \
-  --from-literal=alice='<key>'
-```
-
-```yaml
-# CM deployment
-spec:
-  containers:
-    - name: cm
-      env:
-        - name: SITECORE_MCP_KEY_ALICE
-          valueFrom:
-            secretKeyRef:
-              name: sitecore-mcp-keys
-              key: alice
-```
-</details>
-
-<details>
-<summary><b>Azure App Service</b> — application setting</summary>
-
-App settings surface to the process as environment variables:
-
-```bash
-az webapp config appsettings set \
-  --resource-group my-rg --name my-cm-app \
-  --settings SITECORE_MCP_KEY_ALICE='<key>'
-```
-
-For a shared vault, reference Key Vault instead of storing the literal:
-
-```bash
-az webapp config appsettings set \
-  --resource-group my-rg --name my-cm-app \
-  --settings SITECORE_MCP_KEY_ALICE='@Microsoft.KeyVault(SecretUri=https://my-vault.vault.azure.net/secrets/mcp-alice/)'
-```
-
-Setting an app setting restarts the app, so the new value is picked up automatically.
-</details>
-
-A client whose variable is unset is **silently disabled** — the intended fail-closed behaviour, and
-the first thing to check if a key returns `401`.
-
-### 5. Verify
-
-Any HTTP client works — no tooling from this repo is needed. Call `sitecore_get_context`: it
-confirms authentication, identity mapping, and permissions in one request.
-
-<details open>
-<summary><b>PowerShell</b> (7+, the easiest on Windows)</summary>
-
-```powershell
-$key  = $env:SITECORE_MCP_KEY_ALICE
-$body = @{
-  jsonrpc = '2.0'; id = 1; method = 'tools/call'
-  params  = @{ name = 'sitecore_get_context'; arguments = @{} }
-} | ConvertTo-Json -Depth 6
-
-Invoke-RestMethod -Method Post -Uri 'https://cm.example.com/sitecore/api/mcp' `
-  -Headers @{
-    Authorization          = "Bearer $key"
-    'MCP-Protocol-Version' = '2025-06-18'
-  } `
-  -ContentType 'application/json' -Body $body |
-  Select-Object -ExpandProperty result |
-  Select-Object -ExpandProperty structuredContent
-```
-
-Against a **development certificate**, add `-SkipCertificateCheck`. That parameter does not exist in
-Windows PowerShell 5.1 — use PowerShell 7, which is also what the `pwsh` command runs.
-</details>
-
-<details>
-<summary><b>curl</b></summary>
-
-```bash
-curl -sS https://cm.example.com/sitecore/api/mcp \
-  -H "Authorization: Bearer $SITECORE_MCP_KEY_ALICE" \
-  -H "Content-Type: application/json" \
-  -H "MCP-Protocol-Version: 2025-06-18" \
-  -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"sitecore_get_context","arguments":{}}}'
-```
-
-`$VAR` is bash syntax — in PowerShell write `$env:SITECORE_MCP_KEY_ALICE`, in `cmd.exe`
-`%SITECORE_MCP_KEY_ALICE%`. A variable that does not expand is sent literally and returns `401`.
-</details>
-
-**Development certificates.** Sitecore dev and container instances usually serve a self-signed or
-locally-issued certificate, which stops the request before it ever reaches the endpoint:
-
-| Error | Meaning | Add |
-|---|---|---|
-| `CRYPT_E_NO_REVOCATION_CHECK (0x80092012)` | Windows curl (schannel) cannot reach a revocation list for the certificate | `--ssl-no-revoke` |
-| `SSL certificate problem: self-signed certificate` | The certificate is not trusted | `-k` (curl) · `-SkipCertificateCheck` (PowerShell 7) |
-
-```bash
-curl -sS --ssl-no-revoke -k https://cm.example.com/sitecore/api/mcp ...
-```
-
-These flags are for verifying against a dev certificate — do not bake them into anything permanent.
-On an instance with a properly trusted certificate none of them are needed.
-
-A healthy response reports the instance, the resolved user, whether writes are allowed, and the
-permitted databases. Then check `App_Data/logs/mcp.log.<date>.txt` for the matching `AUDIT` line.
-
-## Connecting a client
-
-**Direct HTTP** — any client speaking Streamable HTTP points at
-`https://cm.example.com/sitecore/api/mcp` with an `Authorization: Bearer <key>` header. Preferred
-wherever the instance has a trusted certificate.
-
-**stdio bridge** — for stdio-only clients, or local instances whose self-signed certificate Node/Bun
-runtimes reject. The bridge is a small .NET process whose `HttpClient` trusts the Windows certificate
-store, so it connects with no cert wrangling:
-
-```powershell
-dotnet publish src/SitecoreMcp.Bridge -c Release
-# -> src/SitecoreMcp.Bridge/bin/Release/net8.0/win-x64/publish/sitecore-mcp-bridge.exe
-```
-
-<details>
-<summary><b>Claude Code / Claude Desktop</b></summary>
 
 ```json
-{
-  "mcpServers": {
-    "sitecore": {
-      "command": "C:\\path\\to\\sitecore-mcp-bridge.exe",
-      "env": {
-        "SITECORE_MCP_URL": "https://cm.example.com/sitecore/api/mcp",
-        "SITECORE_MCP_KEY": "<key>"
-      }
-    }
-  }
-}
+{ "mcpServers": { "sitecore": {
+    "command": "C:\\path\\to\\sitecore-mcp-bridge.exe",
+    "env": { "SITECORE_MCP_URL": "https://cm.example.com/sitecore/api/mcp", "SITECORE_MCP_KEY": "<key>" } } } }
 ```
-</details>
 
-<details>
-<summary><b>VS Code</b> (<code>.vscode/mcp.json</code>)</summary>
+The same `command` + `env` works in VS Code (`.vscode/mcp.json`, `"type": "stdio"`) and opencode. Keep keys out of
+committed config.
 
-```json
-{
-  "servers": {
-    "sitecore": {
-      "type": "stdio",
-      "command": "C:\\path\\to\\sitecore-mcp-bridge.exe",
-      "env": {
-        "SITECORE_MCP_URL": "https://cm.example.com/sitecore/api/mcp",
-        "SITECORE_MCP_KEY": "<key>"
-      }
-    }
-  }
-}
-```
-</details>
+## Security model
 
-<details>
-<summary><b>opencode</b> (<code>opencode.json</code>, project-scoped)</summary>
+| Layer | Behaviour |
+|---|---|
+| **Enablement** | `Mcp.Enabled` is off in the base config; no route is registered when off. |
+| **Authentication** | A key from an environment variable maps to one client, compared in constant time. Rate-limited per effective user. |
+| **Identity** | Calls run as the client's fixed user, or, for an editor-token client, as the editor named by a valid editor token, with no fallback. `SecurityDisabler` is never used. |
+| **Writes** | Off globally *and* per client by default; write tools are hidden from `tools/list` unless both are on. |
+| **Direct changes** | Delete, move, rename, publish, workflow commands, and writes to shared or unversioned fields need confirmation. Called without `confirmationToken`, the tool validates, returns a preview and a single-use, expiring token, and changes nothing; the same call with that token runs it. A host app can keep the token from the model, so only a person confirms. |
+| **Content scope** | Optional content roots (where items may change), search roots and hidden fields, globally or per client. See [Content scope](#content-scope). |
+| **New items and versions** | Created with Sitecore's workflow context on, then checked: an item whose template or item has a workflow lands in the workflow's initial state, never stateless (Sitecore treats a workflow item without a state as approved). Statistics and owner are the calling user. Details in [TOOL_GUIDE](docs/TOOL_GUIDE.md#new-items-and-versions--workflow-state-and-statistics). |
+| **Databases** | Allow-listed per client. |
+| **Admin gate** | Schema, security and dev/ops tools need an administrator and are hidden from others. Config can add an admin requirement (`admin="true"` on a `<tool>`) but never remove one. |
+| **Transport** | HTTPS required by default, plus Origin, client-address (`<allowedAddresses>`, localhost by default), body-size and media-type gates; `<trustedProxies>` for `X-Forwarded-For`. |
+| **Audit** | Every call is logged to `mcp.log`: user, client, identity source, tool, target, status, duration. |
 
-```json
-{
-  "$schema": "https://opencode.ai/config.json",
-  "mcp": {
-    "sitecore": {
-      "type": "local",
-      "command": ["C:\\path\\to\\sitecore-mcp-bridge.exe"],
-      "environment": {
-        "SITECORE_MCP_URL": "https://cm.example.com/sitecore/api/mcp",
-        "SITECORE_MCP_KEY": "{file:./.sitecore-mcp-key}"
-      },
-      "enabled": true
-    }
-  }
-}
-```
-</details>
+**Per environment:** local dev may use an admin user with `Mcp.RequireHttps=false` and `Mcp.VerboseErrors=true`. Shared
+dev/QA: one limited user per developer, `databases="master"`. Staging: read-only or off. **Production: off.**
 
-Keep keys out of committed config — use an environment variable or a gitignored file (as above, with
-`.sitecore-mcp-key` in `.gitignore`).
+### Editor tokens
 
-> Connecting a Node/Bun client **directly** over HTTPS to a self-signed instance requires trusting
-> the cert (`NODE_EXTRA_CA_CERTS` plus a full client restart). The bridge avoids this entirely.
-
-## Operating it
-
-### Recommended posture per environment
-
-| Environment | Enabled | Writes | Client | Notes |
-|---|---|---|---|---|
-| **Local dev** | Yes | Yes | Admin user is fine | `Mcp.RequireHttps=false` and `Mcp.VerboseErrors=true` are reasonable locally. |
-| **Shared dev / QA** | Yes | Yes | One limited user **per developer** | Per-person keys make the audit log meaningful. Scope `databases` to `master`. |
-| **Staging / UAT** | Read-only, or off | No | Limited | Enable only if agents genuinely need it there. |
-| **Production** | **Off** | — | — | Leave `Mcp.Enabled=false`. If a read-only case is unavoidable, pair it with an address allow-list and a user restricted to the branches it needs. |
-
-### Designing clients
-
-A client is a key, a Sitecore user, and its limits. Two decisions matter:
-
-- **One client per person, not one per team.** The audit log records the mapped user, so shared keys
-  cost you attribution — the main thing you want when an agent changes content.
-- **Grant the Sitecore user, not the client.** Permissions come from the mapped user's roles and item
-  ACLs, so scope the *user* to the branches it should touch. `allowWrites` and `databases` are a
-  second, coarser fence on top.
-
-Each `<client>` needs a unique `id` attribute — Sitecore's config merge collapses sibling elements
-without one, and only the last would survive.
-
-### Acting as the logged-in editor (editor tokens)
-
-A client embedded in the Content Editor — CorePilot — should act as **the editor using it**, not a
-service account, so the editor's item and field ACLs, locks, and workflow apply. Such a client is
-configured with `requiresEditorToken="true"` instead of a `user`:
+A client inside the Content Editor (CorePilot) should act as the editor using it, not a service account. Configure it
+with `requiresEditorToken="true"` and **no** `user` (a client with both is skipped at startup):
 
 ```xml
-<client id="corepilot"
-        keyEnvVar="SITECORE_MCP_KEY_COREPILOT"
-        requiresEditorToken="true"
-        allowWrites="true"
-        databases="master" />
+<client id="corepilot" keyEnvVar="SITECORE_MCP_KEY_COREPILOT" requiresEditorToken="true" allowWrites="true" databases="master" />
 ```
 
-1. When the panel opens, Sitecore issues a short-lived **editor token** for the logged-in user — an
-   HS256 JWT with issuer, audience (the client's `id`, or its `audience` attribute), expiry, the user
-   name (`sub`), and an `admin` claim. It is issued either in-process by
-   `SitecoreMcp.Server.Transport.EditorTokenIssuer.TryIssueForContextUser(...)`, or by browser code
-   with `POST /sitecore/api/sitecore-mcp/editor-token` (authenticated by the Sitecore login cookie;
-   returns `{ token, expiresAt, audience, user, header }`).
-2. The client sends it on every call as `X-Mcp-Editor-Token`, alongside its own key.
-3. Sitecore-MCP verifies it on every call and runs the call as that editor. A missing, expired,
-   tampered, or other-audience token is refused with `401` (the message says which); a token for a
-   since-deleted user is `401`, for a disabled or locked-out one `403`. The admin gate follows the
-   **live** user, not the token's claim.
+1. Sitecore issues a short-lived HS256 editor token for the logged-in user: in-process via
+   `EditorTokenIssuer.TryIssueForContextUser(...)`, or from the browser with
+   `POST /sitecore/api/sitecore-mcp/editor-token?audience=<client id>` (authenticated by the Sitecore login cookie).
+2. The client sends it on every call as `X-Mcp-Editor-Token`, next to its own key.
+3. Every call is verified and runs as that editor. Missing, expired, tampered or other-audience tokens get `401` (the
+   message says which), a disabled or locked-out user `403`. The admin gate follows the live user, not the token.
 
-Rules that keep it fail-closed:
+The signing secret (32+ characters, the same on every CM) is in the variable named by `Mcp.EditorToken.SecretEnvVar`
+(default `SITECORE_MCP_EDITOR_TOKEN_SECRET`); unset, no token is issued or accepted. Tokens are issued only to enabled
+users of `Mcp.EditorToken.AllowedDomains` (default `sitecore`).
 
-- An editor-token client **cannot have a fixed user**. A `<client>` with both `requiresEditorToken`
-  and `user` is skipped with a warning, so there is no fallback identity.
-- The signing secret (32+ characters) lives in the environment variable named by
-  `Mcp.EditorToken.SecretEnvVar` (default `SITECORE_MCP_EDITOR_TOKEN_SECRET`). Unset, no token is
-  issued or accepted. Set it like any client key, to the same value on every CM instance.
-- Tokens are issued only to authenticated users of `Mcp.EditorToken.AllowedDomains` (default
-  `sitecore`), whose account is enabled and not locked out, and only for audiences of configured
-  editor-token clients.
-- Fixed-user clients are unchanged and ignore `X-Mcp-Editor-Token`.
-
-Rate limiting and the audit log key on the effective user; the audit line also records the client
-and whether the identity came from an editor token.
-
-### Content scope: content roots, search roots and hidden fields
-
-Every tool respects three optional limits, set globally inside `<sitecoreMcp>` and/or per client:
+### Content scope
 
 | Limit | Effect |
 |---|---|
-| **Content roots** | Paths under which items may be changed. Outside every content root an item is read-only: every write tool (fields, create, move, copy destination, rename, delete, versions, locks, protection, ACLs, presentation, templates, media upload, workflow, publish, referrer updates) refuses before anything changes. `publishRelatedItems` is refused while content roots apply. |
-| **Search roots** | Paths under which `sitecore_search`, `sitecore_grep`, `sitecore_facet` and `sitecore_query_items` look. Independent of content roots. A requested `rootPath` is narrowed to the search roots; outside them the search returns nothing. |
-| **Hidden fields** | Fields (by name or ID) that are never read, found, shown or written: absent from `get_item`, templates, search/grep, references/referrers and the `change_item_template` diff. Writing one fails with the same "field not found" error as a field the template lacks; a query testing one is refused; free-text search hits that match only through a hidden field are dropped (the total is then flagged `totalIsUpperBound`). |
+| **Content roots** | Outside every content root an item is read-only: every write tool refuses before anything changes. |
+| **Search roots** | `sitecore_search`, `grep`, `facet` and `query_items` only look under them. |
+| **Hidden fields** | Never read, found, shown or written; writing one fails like a field the template lacks. |
 
 ```xml
 <contentRoots hint="list:AddContentRoot"><root>/sitecore/content/Site</root></contentRoots>
 <searchRoots hint="list:AddSearchRoot"><root>/sitecore/content/Site</root></searchRoots>
 <hiddenFields hint="list:AddHiddenField"><field>Api Key</field></hiddenFields>
-
-<client id="corepilot" ... contentRoots="/sitecore/content/Site|/sitecore/media library/Site"
-        searchRoots="/sitecore/content/Site" hiddenFields="Internal Notes" />
+<!-- per client: contentRoots="/a|/b" searchRoots="..." hiddenFields="..." -->
 ```
 
-An unconfigured limit restricts nothing. A client's `contentRoots`/`searchRoots` replace the global
-lists; its `hiddenFields` add to them. `sitecore_get_context` reports the effective roots (never the
-hidden fields). A host can supply scope from elsewhere (e.g. Sitecore items) with
-`<contentScopeProvider type="..."/>` implementing `SitecoreMcp.Server.Security.IContentScopeProvider`.
+Unset limits restrict nothing. A client's roots replace the global ones; its hidden fields add to them. A host can
+supply the scope from elsewhere with `<contentScopeProvider type="..."/>` implementing
+`SitecoreMcp.Server.Security.IContentScopeProvider` (CorePilot does).
 
-### Security model
+## Settings
 
-| Layer | Behaviour |
-|---|---|
-| **Enablement** | `Mcp.Enabled` is `false` in the base config; no route is registered when off. |
-| **Authentication** | A key from an environment variable maps to one client. Compared in constant time, rate-limited per effective user (30 burst, 1/sec refill by default). |
-| **Identity** | Calls run via `UserSwitcher` as the client's fixed user, or — for a `requiresEditorToken` client — as the editor named by a valid, short-lived editor token, with no fallback. Item/field ACLs, workflow, and auditing apply. `SecurityDisabler` is never used. |
-| **Writes** | Off globally *and* per client by default. Write tools are hidden from `tools/list` when either switch is off. |
-| **Databases** | Allow-listed per client. A `master`-only client cannot read `core` or publish to `web`. |
-| **Admin gate** | Schema, security, and dev/ops tools require an administrator client and are hidden from others. Config can **add** an admin requirement (`admin="true"` on a `<tool>`) but never remove one, so a config mistake cannot expose a privileged tool. |
-| **Transport** | HTTPS required by default, plus Origin, client-address, body-size, and media-type gates. |
-| **Audit** | Every call is logged to `mcp.log` — user, tool, target, status, duration — separate from the main Sitecore log. |
-
-### Settings reference
-
-All under `<sitecore><settings>`; patch what you need per environment.
+All under `<sitecore><settings>`.
 
 | Setting | Default | Purpose |
 |---|---|---|
-| `Mcp.Enabled` | `false` | Master switch. Off means no route at all. |
-| `Mcp.EndpointPath` | `sitecore/api/mcp` | Route the endpoint serves on. |
-| `Mcp.RequireHttps` | `true` | Reject non-HTTPS requests. Turn off only locally. |
+| `Mcp.Enabled` | `false` | Master switch. |
+| `Mcp.EndpointPath` | `sitecore/api/mcp` | Route of the endpoint. |
+| `Mcp.RequireHttps` | `true` | Reject plain HTTP. Turn off only locally. |
 | `Mcp.AllowWrites` | `false` | Global write switch, ANDed with each client's `allowWrites`. |
-| `Mcp.MaxRequestBytes` | `1048576` | Request body cap — also the practical ceiling on media uploads. |
-| `Mcp.MaxConcurrentCalls` | `4` | Tool calls executed concurrently before shedding. |
+| `Mcp.MaxRequestBytes` | `1048576` | Request body cap, which also caps media uploads. |
+| `Mcp.MaxConcurrentCalls` | `4` | Concurrent tool calls before shedding with `503`. |
+| `Mcp.RateLimit.Capacity` / `.RefillPerSecond` | `30` / `1` | Burst and sustained requests per effective user. |
 | `Mcp.MaxFieldLength` | `2000` | Field values are truncated beyond this in output. |
-| `Mcp.Images.MaxDimension` | `1024` | Longest side, in pixels, of an image returned as image content; larger images are scaled down (never up). A smaller `maxDimension` argument is honoured, a larger one is capped here. |
-| `Mcp.Images.MaxBytes` | `1048576` | Largest encoded size (before base64) of a returned image; a heavier rendering is re-rendered smaller until it fits, or refused. |
+| `Mcp.Images.MaxDimension` / `.MaxBytes` | `1024` / `1048576` | Limits for images returned by `sitecore_get_media_image`. |
 | `Mcp.VerboseErrors` | `false` | Full error detail in responses. Development only. |
-| `Mcp.RateLimit.Capacity` | `30` | Burst size per client. |
-| `Mcp.RateLimit.RefillPerSecond` | `1` | Sustained request rate per client. |
-| `Mcp.ServerName` | `SitecoreMcp` | Name reported at `initialize`. Worth setting per environment if a client connects to several. |
-| `Mcp.ServerVersion` | `0.1.0` | Version reported at `initialize`. |
-| `Mcp.EditorToken.SecretEnvVar` | `SITECORE_MCP_EDITOR_TOKEN_SECRET` | Environment variable holding the editor-token signing secret (32+ chars). Unset disables editor tokens. |
-| `Mcp.EditorToken.Issuer` | `SitecoreMcp` | `iss` written into and required on editor tokens. |
-| `Mcp.EditorToken.LifetimeSeconds` | `900` | Editor-token lifetime (minimum 30). |
-| `Mcp.EditorToken.ClockSkewSeconds` | `60` | Tolerance on expiry and not-before. |
-| `Mcp.EditorToken.EndpointPath` | `sitecore/api/sitecore-mcp/editor-token` | Route of the issuing endpoint; registered only when an editor-token client exists and the secret is set. |
-| `Mcp.EditorToken.AllowedDomains` | `sitecore` | Domains (pipe-separated) whose users may be issued a token. |
+| `Mcp.ServerName` / `Mcp.ServerVersion` | `SitecoreMcp` / `0.1.0` | Reported at `initialize`. |
+| `Mcp.EditorToken.SecretEnvVar` | `SITECORE_MCP_EDITOR_TOKEN_SECRET` | Variable holding the editor-token secret. |
+| `Mcp.EditorToken.Issuer` / `.LifetimeSeconds` / `.ClockSkewSeconds` | `SitecoreMcp` / `900` / `60` | Editor-token issuer, lifetime (min 30) and clock tolerance. |
+| `Mcp.EditorToken.EndpointPath` | `sitecore/api/sitecore-mcp/editor-token` | Route of the issuing endpoint. |
+| `Mcp.EditorToken.AllowedDomains` | `sitecore` | Domains (pipe-separated) whose users may get a token. |
 
-Also available: `<allowedOrigins>`, `<allowedAddresses>` (defaults to localhost — widen it for a
-shared instance), and `<trustedProxies>` for `X-Forwarded-For` handling.
-
-### Troubleshooting
+## Troubleshooting
 
 | Symptom | Cause |
 |---|---|
-| `CRYPT_E_NO_REVOCATION_CHECK`, or a self-signed certificate error | A development certificate — see [Verify](#5-verify) for the flags. Nothing to do with the module. |
-| `401` for a key that should work | The worker has not re-read its environment (app-pool env vars need a full stop/start, not a recycle), the client's `keyEnvVar` is unset, or a shell variable did not expand and the literal `$NAME` was sent. |
-| `401` "A valid editor token is required" | The client has `requiresEditorToken="true"`: send `X-Mcp-Editor-Token`. The message says whether the token was missing, expired, issued for another client, or not validly signed — or that `Mcp.EditorToken.SecretEnvVar` is unset. |
-| An editor-token client never authenticates | It was skipped at startup: it has a `user` attribute (not allowed with `requiresEditorToken`), or no `id`/`audience`. Check `mcp.log`. |
-| Only one client works | Each `<client>` needs a unique `id`; without one the config merge collapses them. |
-| Tool missing from `tools/list` | It is write-gated (check `Mcp.AllowWrites` and the client's `allowWrites`) or admin-gated (the mapped user is not an administrator). |
-| Endpoint returns HTML | The app domain is restarting, or the route is not registered — check the Sitecore log for an initialize-pipeline error. |
-| `Rate limit exceeded` | Expected under scripted bursts; raise `Mcp.RateLimit.*` or pace the calls. |
+| Certificate error (`CRYPT_E_NO_REVOCATION_CHECK`, self-signed) | A dev certificate; see [Verify](#4-verify). |
+| `401` for a key that should work | The pool was recycled instead of stopped and started, `keyEnvVar` is unset, or a shell variable did not expand. |
+| `401` "A valid editor token is required" | Send `X-Mcp-Editor-Token`; the message says whether it was missing, expired, for another client or badly signed, or that the secret is unset. |
+| An editor-token client never authenticates | It was skipped at startup (it has a `user`, or no `id`); see `mcp.log`. |
+| Only one client works | Each `<client>` needs a unique `id`. |
+| Tool missing from `tools/list` | Write-gated (`Mcp.AllowWrites` and the client's `allowWrites`) or admin-gated. |
+| A write returns `confirmationRequired` | Expected for direct changes; repeat the call with the returned `confirmationToken` after a person confirms. |
+| `429` / `503` "server is busy" | Rate limit or `Mcp.MaxConcurrentCalls`; raise them or pace the calls. |
+| Endpoint returns HTML | The app is restarting or the route is not registered; check the Sitecore log. |
 
 ## Tools
 
-67 tools for an administrator client; 41 for a non-admin one (26 are admin-gated). Call
-**`sitecore_get_context`** first — it reports the user, whether writes are allowed, and which
-databases and languages are available.
+67 for an administrator, 41 for other users. Call `sitecore_get_context` first. Every tool and how to use it well is in
+[docs/TOOL_GUIDE.md](docs/TOOL_GUIDE.md); the condensed version ships as the server's MCP `instructions`.
 
-<details>
-<summary><b>Reading &amp; navigation</b> (5)</summary>
-
-| Tool | Purpose |
+| Area | Tools (`sitecore_` prefix omitted) |
 |---|---|
-| `sitecore_get_context` | Instance, version, your user, write permission, databases, languages. |
-| `sitecore_get_item` | One item by path or ID; populated non-standard fields by default. |
-| `sitecore_get_children` | Immediate children, paged. |
-| `sitecore_get_ancestors` | Root-down path to the item's parent. |
-| `sitecore_query_items` | Sitecore query (XPath-like axes) for structural lookups. |
-</details>
+| Reading | `get_context`, `get_item`, `get_children`, `get_ancestors`, `query_items` |
+| Search | `search`, `grep`, `facet`, `index_status` |
+| Items | `create_item`, `update_item`, `reset_item_fields`, `move_item`, `copy_item`, `rename_item`, `delete_item`, `change_item_template`, `add_item_version`, `remove_item_version`, `lock_item`, `unlock_item`, `protect_item`, `unprotect_item` |
+| Templates | `get_template`, `list_templates`, `create_template`, `add_base_template`, `remove_base_template` |
+| Presentation | `get_renderings`, `add_rendering`, `set_rendering`, `move_rendering`, `switch_rendering`, `remove_rendering`, `set_layout`, `reset_layout` |
+| Media | `get_media_image` (returns MCP image content), `upload_media` |
+| References | `get_item_referrers`, `get_item_references`, `update_item_referrers` |
+| Workflow & publishing | `get_workflow_history`, `invoke_workflow`, `publish_item`, `get_jobs` |
+| Security (admin) | `get_user`, `new_user`, `remove_user`, `enable_user`, `disable_user`, `unlock_user`, `get_role`, `new_role`, `remove_role`, `add_role_member`, `remove_role_member`, `get_domain`, `new_domain`, `remove_domain`, `test_item_acl`, `add_item_acl`, `set_item_acl`, `clear_item_acl` |
+| Dev/ops (admin) | `rebuild_index`, `populate_solr_schema`, `rebuild_link_database`, `get_logs` |
 
-<details>
-<summary><b>Search</b> (4)</summary>
-
-| Tool | Purpose |
-|---|---|
-| `sitecore_search` | Index-backed search: name, free text, template, subtree, language, field equality, date ranges. Hits grouped by item. |
-| `sitecore_grep` | Literal/regex match over **raw field values**, including standard and security fields the index cannot see. |
-| `sitecore_facet` | Counts grouped by an indexed field — template distribution, language coverage. |
-| `sitecore_index_status` 🔒 | Document count, last update, and whether an index is stale. |
-
-Rule of thumb: **search** = metadata and indexed content (cheap), **grep** = raw field values
-(exact, scoped), **facet** = counts.
-</details>
-
-<details>
-<summary><b>Items — writing</b> (14)</summary>
-
-| Tool | Purpose |
-|---|---|
-| `sitecore_create_item` | Create from a template, with optional initial fields. |
-| `sitecore_update_item` | Change only the fields passed; verifies each one persisted. |
-| `sitecore_reset_item_fields` | Revert fields to standard-values inheritance (the un-override). |
-| `sitecore_move_item` | Re-parent, refusing collisions and own-subtree moves. |
-| `sitecore_copy_item` | Copy, optionally deep. Copies field **data**, not just structure. |
-| `sitecore_rename_item` | Rename, refusing sibling collisions. |
-| `sitecore_delete_item` | Recycles by default; `permanent: true` destroys irreversibly. |
-| `sitecore_change_item_template` | Swap template, diffing every field so dropped values are reported in `dataLost`. |
-| `sitecore_add_item_version` / `sitecore_remove_item_version` | Language versions; `sourceLanguage` seeds a translation. |
-| `sitecore_lock_item` / `sitecore_unlock_item` | Explicit checkout. Another user's lock needs admin + `force`. |
-| `sitecore_protect_item` / `sitecore_unprotect_item` | Toggle the read-only flag. |
-</details>
-
-<details>
-<summary><b>Templates</b> (5)</summary>
-
-| Tool | Purpose |
-|---|---|
-| `sitecore_get_template` | An item's template: base templates and every field, own and inherited. |
-| `sitecore_list_templates` | Find a template by name substring, paged. |
-| `sitecore_create_template` 🔒 | Create with base templates, sections, typed fields, and standard values. |
-| `sitecore_add_base_template` 🔒 / `sitecore_remove_base_template` 🔒 | Edit an existing template's inheritance. |
-
-Field types are validated against the live registry, so a typo is refused **with the closest real
-type names** rather than silently creating a broken field.
-</details>
-
-<details>
-<summary><b>Presentation</b> (8)</summary>
-
-| Tool | Purpose |
-|---|---|
-| `sitecore_get_renderings` | Components on an item for a device: placeholder, datasource, parameters, unique ID, and the device's layout. |
-| `sitecore_add_rendering` | Place a component, optionally at a given `index`. |
-| `sitecore_set_rendering` | Change datasource, placeholder, or parameters (merged key by key). |
-| `sitecore_move_rendering` | Reposition in render order. |
-| `sitecore_switch_rendering` | Swap the component in place, keeping everything else. Atomic. |
-| `sitecore_remove_rendering` | Remove an instance by unique ID. |
-| `sitecore_set_layout` | Assign the device's outer layout. |
-| `sitecore_reset_layout` | Revert to inherited presentation. |
-
-Writes target the **final (per-version) layout** by default — the Experience Editor's behaviour —
-with `finalLayout: false` for the shared base.
-</details>
-
-<details>
-<summary><b>Media</b> (2)</summary>
-
-| Tool | Purpose |
-|---|---|
-| `sitecore_get_media_image` | Return a media-library image as MCP image content the model can see, resized within `Mcp.Images.*`, with its path, MIME type, dimensions and alt text. |
-| `sitecore_upload_media` | Upload a file from base64 into the media library; the extension decides the media type. Returns the item and its `mediaUrl`. |
-
-Uploads are bounded by `Mcp.MaxRequestBytes` — suited to icons and documents, not video.
-
-**Image results.** `sitecore_get_media_image` returns an MCP image content block
-(`{"type":"image","data":"<base64>","mimeType":"image/png"}`) followed by a text block, and the same
-description as `structuredContent` (`id`, `path`, `mimeType`, `width`, `height`, `originalWidth`,
-`originalHeight`, `resized`, `sizeBytes`, `limits`, and `alt` unless hidden). PNG, JPEG, GIF and
-WebP are supported; SVG and non-image media are refused. Sitecore's media pipeline does the resizing,
-so the image keeps its format. The read runs as the calling user (an editor-token client's editor),
-so an image they cannot read is "not found", and a hidden `Blob` field makes the item unreadable as
-an image. Custom tools return images through `McpToolResult.Image(bytes, mimeType, metadata)` /
-`McpContent.FromImage`; `SitecoreMcp.Server.Media.MediaImageEncoder` applies the limits to any
-resizer.
-</details>
-
-<details>
-<summary><b>References &amp; impact analysis</b> (3)</summary>
-
-| Tool | Purpose |
-|---|---|
-| `sitecore_get_item_referrers` | What points **at** an item — run before delete/move/rename. |
-| `sitecore_get_item_references` | What an item points **at**. |
-| `sitecore_update_item_referrers` | Repoint or remove incoming links, reported per referring item. |
-
-Results come from the Link Database, so an empty result is not proof of absence when it is stale —
-the tools say so, and `sitecore_rebuild_link_database` refreshes it.
-</details>
-
-<details>
-<summary><b>Publishing &amp; jobs</b> (2)</summary>
-
-| Tool | Purpose |
-|---|---|
-| `sitecore_publish_item` | Publish to the configured targets, optionally deep and including related items. Returns a job handle. |
-| `sitecore_get_jobs` | List jobs, or poll one by handle (job **or** publish handle). |
-
-Publishing is asynchronous: a handle means *started*, never *finished*. A running publish cannot be
-cancelled — Sitecore offers no safe way — so scope publishes narrowly.
-</details>
-
-<details>
-<summary><b>Workflow</b> (2)</summary>
-
-| Tool | Purpose |
-|---|---|
-| `sitecore_get_workflow_history` | Workflow, current state, **available commands**, and transition history. |
-| `sitecore_invoke_workflow` | Execute a command (Submit, Approve, …). An unavailable command is refused listing what is available. |
-</details>
-
-<details>
-<summary><b>Security &amp; membership</b> (18, all admin-only)</summary>
-
-| Tool | Purpose |
-|---|---|
-| `sitecore_get_user` 🔒 / `sitecore_get_role` 🔒 / `sitecore_get_domain` 🔒 | Read accounts by exact name or substring. Passwords are never returned. |
-| `sitecore_new_user` 🔒 / `sitecore_remove_user` 🔒 | Create or delete a user; built-ins and the calling user are protected. |
-| `sitecore_enable_user` 🔒 / `sitecore_disable_user` 🔒 / `sitecore_unlock_user` 🔒 | Account state and failed-login lockout. |
-| `sitecore_new_role` 🔒 / `sitecore_remove_role` 🔒 | Role lifecycle. |
-| `sitecore_add_role_member` 🔒 / `sitecore_remove_role_member` 🔒 | Membership; a member may be a user **or** a role. |
-| `sitecore_new_domain` 🔒 / `sitecore_remove_domain` 🔒 | Domains; built-ins are protected. |
-| `sitecore_test_item_acl` 🔒 | Does an account have a right here, after inheritance and denies? |
-| `sitecore_add_item_acl` 🔒 / `sitecore_set_item_acl` 🔒 / `sitecore_clear_item_acl` 🔒 | Item access rules. |
-
-Setting a user's password is deliberately **not** offered.
-</details>
-
-<details>
-<summary><b>Dev / ops</b> (4, all admin-only)</summary>
-
-| Tool | Purpose |
-|---|---|
-| `sitecore_rebuild_index` 🔒 | Full rebuild by name, or a cheap subtree refresh via `rootPath`. Background job. |
-| `sitecore_populate_solr_schema` 🔒 | Populate the Solr managed schema — run **before** a rebuild after adding indexed fields. |
-| `sitecore_rebuild_link_database` 🔒 | Refresh the store behind the reference tools. |
-| `sitecore_get_logs` 🔒 | List Sitecore's log files or tail one, filtered by level and text. |
-</details>
-
-🔒 = administrator client only.
-
-Fuller usage notes — the sharp edges, which tool to reach for, and how results are shaped — are in
-[docs/TOOL_GUIDE.md](docs/TOOL_GUIDE.md). A condensed version ships as the server `instructions`, so
-compliant clients give the model that guidance automatically.
+Tools are registered in `SitecoreMcp.config`, so a solution can add its own (`McpTool<TArgs>`) without recompiling this
+assembly.
 
 ## License
 

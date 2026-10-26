@@ -276,6 +276,7 @@ clean on 10.3 can still fail on 10.4 where an API has since been deprecated — 
 | File | Purpose |
 |---|---|
 | [TOOL_GUIDE.md](TOOL_GUIDE.md) | Working notes on using the tools well; the condensed version ships as the server `instructions`. |
-| [SPE_TOOL_PLAN.md](SPE_TOOL_PLAN.md) | Triage of the SPE tool list: what to adapt, combine, or skip, and why. |
-| [SPE_TOOL_BACKLOG.md](SPE_TOOL_BACKLOG.md) | The implementation checklist derived from that triage. |
-| [IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md) | Per-tool design: arguments, Kernel APIs, safety, result shape. Includes decision records for the two tools deliberately not built. |
+| [archive/](archive/) | Finished planning documents, kept for history: |
+| [archive/SPE_TOOL_PLAN.md](archive/SPE_TOOL_PLAN.md) | Triage of the SPE tool list: what to adapt, combine, or skip, and why. |
+| [archive/SPE_TOOL_BACKLOG.md](archive/SPE_TOOL_BACKLOG.md) | The implementation checklist derived from that triage. |
+| [archive/IMPLEMENTATION_PLAN.md](archive/IMPLEMENTATION_PLAN.md) | Per-tool design: arguments, Kernel APIs, safety, result shape. Includes decision records for the two tools deliberately not built. |
