@@ -13,12 +13,12 @@ namespace SitecoreMcp.Server.Transport
     {
         /// <summary>Creates a client binding a key to a fixed Sitecore user and its permissions.</summary>
         public McpClient(string key, string userName, bool allowWrites, IEnumerable<string> databases)
-            : this(null, key, userName, false, null, allowWrites, databases, null)
+            : this(null, key, userName, false, null, allowWrites, databases, null, false)
         {
         }
 
         private McpClient(string id, string key, string userName, bool requiresEditorToken, string editorTokenAudience,
-            bool allowWrites, IEnumerable<string> databases, ContentScope scope)
+            bool allowWrites, IEnumerable<string> databases, ContentScope scope, bool confirmDirectChanges)
         {
             Id = id;
             Key = key;
@@ -28,20 +28,25 @@ namespace SitecoreMcp.Server.Transport
             AllowWrites = allowWrites;
             Databases = new HashSet<string>(databases ?? new string[0], StringComparer.OrdinalIgnoreCase);
             Scope = scope ?? ContentScope.Unrestricted;
+            ConfirmDirectChanges = confirmDirectChanges;
         }
 
-        /// <summary>Creates a fixed-user client with a config id.</summary>
+        /// <summary>
+        /// Creates a fixed-user client with a config id. Its direct changes run on the first call unless
+        /// <paramref name="confirmDirectChanges"/> opts it in to server-enforced confirmation.
+        /// </summary>
         public static McpClient ForUser(string id, string key, string userName, bool allowWrites, IEnumerable<string> databases,
-            ContentScope scope = null) =>
-            new McpClient(id, key, userName, false, null, allowWrites, databases, scope);
+            ContentScope scope = null, bool confirmDirectChanges = false) =>
+            new McpClient(id, key, userName, false, null, allowWrites, databases, scope, confirmDirectChanges);
 
         /// <summary>
         /// Creates a client that has no fixed user: every call must carry an editor token issued for
-        /// <paramref name="audience"/>, and runs as the editor it names.
+        /// <paramref name="audience"/>, and runs as the editor it names. Its direct changes always need
+        /// confirmation: the editor confirms them in the client (CorePilot), and that cannot be turned off.
         /// </summary>
         public static McpClient ForEditorToken(string id, string key, string audience, bool allowWrites, IEnumerable<string> databases,
             ContentScope scope = null) =>
-            new McpClient(id, key, null, true, audience, allowWrites, databases, scope);
+            new McpClient(id, key, null, true, audience, allowWrites, databases, scope, true);
 
         /// <summary>The client's config id, used in the audit log; may be null for clients built in code.</summary>
         public string Id { get; }
@@ -72,6 +77,14 @@ namespace SitecoreMcp.Server.Transport
         /// unconfigured part is null, so the global scope applies; see <see cref="ConfiguredContentScopeProvider"/>.
         /// </summary>
         public ContentScope Scope { get; }
+
+        /// <summary>
+        /// Whether direct changes (delete, move, rename, publish, workflow commands, shared-field writes)
+        /// need server-enforced confirmation for this client: the first call returns a preview and a
+        /// token, and the change runs only on a repeat with that token. Always true for an editor-token
+        /// client; for a fixed-user client false unless configured, so its changes run on the first call.
+        /// </summary>
+        public bool ConfirmDirectChanges { get; }
 
         /// <summary>Whether the given database name is in this client's allow-list.</summary>
         public bool CanUseDatabase(string database) =>

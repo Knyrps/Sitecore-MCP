@@ -24,7 +24,7 @@ namespace SitecoreMcp.Server.Tools.Workflow
     /// Executes a workflow command on an item (submit, approve, reject, ...), moving it through its
     /// workflow. Only commands available in the item's current state to the calling user can run.
     /// </summary>
-    public sealed class InvokeWorkflowTool : McpTool<InvokeWorkflowArgs>
+    public sealed class InvokeWorkflowTool : McpTool<InvokeWorkflowArgs>, IDirectChangeDescription
     {
         /// <inheritdoc />
         public override string Name => "sitecore_invoke_workflow";
@@ -40,6 +40,14 @@ namespace SitecoreMcp.Server.Tools.Workflow
             "the commands that ARE available; check them first with sitecore_get_workflow_history. This " +
             "is a direct change: called without a confirmationToken it only returns a preview (the state " +
             "the item moves from and to) and changes nothing; the command runs once the editor has confirmed.";
+
+        /// <inheritdoc />
+        public string DescriptionWithoutConfirmation =>
+            "Execute a workflow command on a Sitecore item (e.g. Submit, Approve, Reject), moving it " +
+            "to its next workflow state. The command must be available in the item's current state to " +
+            "this client's user - workflow security applies. An unavailable command is refused with " +
+            "the commands that ARE available; check them first with sitecore_get_workflow_history. The " +
+            "command runs on the first call; the result reports the old and new state.";
 
         /// <inheritdoc />
         protected override McpToolResult Execute(InvokeWorkflowArgs args, McpCallContext context)

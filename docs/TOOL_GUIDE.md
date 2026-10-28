@@ -109,10 +109,26 @@ correct `_name` field.
 
 ## Direct changes need confirmation
 
-Some changes take effect immediately and cannot be discarded, so the editor confirms them before
-they run. The server enforces this: `delete_item`, `move_item`, `rename_item`, `publish_item`,
-`invoke_workflow`, and `update_item` / `reset_item_fields` **when they change a shared or
-unversioned field** are *direct changes*.
+Some changes take effect immediately and cannot be discarded: `delete_item`, `move_item`,
+`rename_item`, `publish_item`, `invoke_workflow`, and `update_item` / `reset_item_fields` **when they
+change a shared or unversioned field** are *direct changes*. Whether the server makes the editor
+confirm them is a **per-client** setting, `confirmDirectChanges` on the `<client>`;
+`sitecore_get_context` reports it for the calling client, and the server `instructions` and tool
+descriptions are worded to match.
+
+| Client | Confirmation |
+|---|---|
+| `requiresEditorToken="true"` (CorePilot) | Always. `confirmDirectChanges="false"` is refused: the client is skipped at startup. |
+| Fixed `user` (IDE agents, Claude Code, scripts) | Off by default (`Mcp.ConfirmDirectChanges`, default `false`); `confirmDirectChanges="true"` opts in. |
+
+**Without confirmation** the change runs on the first call. Every other check still applies first
+(item and field security, rights, content roots, hidden fields, the move/copy/rename pre-checks, the
+write and admin gates). A `confirmationToken` is ignored. The result is the tool's usual result plus
+`directChange: { summary, confirmation: "skipped" }` (the summary is the preview sentence, also the
+first text block), and the audit line ends `confirmed=skipped`. The calling tool's own permission
+prompt is then the check before a change.
+
+**With confirmation:**
 
 - Called **without** `confirmationToken`, a direct-change tool validates everything it can (item
   exists, rights, content roots, collisions) and returns a **preview** — nothing is changed. The text
@@ -135,7 +151,8 @@ lacks the rights — **delete** on the source and **create** on the destination 
 on the destination for a copy, **rename** on the item for a rename — or when the change would leave
 or cross the configured **content roots** (a content root itself cannot be moved or renamed). Until
 content roots are configured every path counts as inside one root, so only rights are checked.
-`delete_item` likewise checks delete rights and the content roots before previewing.
+`delete_item` likewise checks delete rights and the content roots before previewing. Without
+confirmation the same checks run before the change.
 
 ## Writes (only when allowed)
 

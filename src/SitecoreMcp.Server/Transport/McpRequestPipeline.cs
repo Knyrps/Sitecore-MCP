@@ -147,22 +147,25 @@ namespace SitecoreMcp.Server.Transport
             var user = User.FromName(userName, true);
             var stopwatch = Stopwatch.StartNew();
             DispatchOutcome outcome;
+            McpCallContext context;
 
             using (new UserSwitcher(user))
             {
                 var scope = ResolveScope(client);
-                var context = new McpCallContext(client, user, _settings, scope)
+                context = new McpCallContext(client, user, _settings, scope)
                 {
                     Confirmations = _confirmations,
                     ContentRoots = new ContentScopeBoundary(scope)
                 };
                 var catalog = _registry.CreateCatalog(context);
-                var dispatcher = new McpDispatcher(catalog, _settings.ServerName, _settings.ServerVersion);
+                // Built per call, so initialize's instructions match the client's confirmation setting.
+                var dispatcher = new McpDispatcher(catalog, _settings.ServerName, _settings.ServerVersion,
+                    McpServerInstructions.For(client.ConfirmDirectChanges));
                 outcome = dispatcher.Dispatch(envelope);
             }
 
             stopwatch.Stop();
-            Audit(authentication, envelope, outcome, stopwatch.ElapsedMilliseconds);
+            Audit(authentication, envelope, outcome, stopwatch.ElapsedMilliseconds, context.DirectChange);
             return McpResponse.FromOutcome(outcome);
         }
 
@@ -215,17 +218,15 @@ namespace SitecoreMcp.Server.Transport
             }
         }
 
-        private static void Audit(McpAuthentication authentication, McpRequestEnvelope envelope, DispatchOutcome outcome, long elapsedMs)
+        private static void Audit(McpAuthentication authentication, McpRequestEnvelope envelope, DispatchOutcome outcome, long elapsedMs,
+            Tools.Confirmation.DirectChangeOutcome? directChange)
         {
             var target = envelope.Method == "tools/call"
                 ? envelope.Params?.Value<string>("name") ?? "(unknown)"
                 : envelope.Method;
 
-            McpLog.Audit(
-                $"user={authentication.UserName} client={authentication.Client.Id ?? "(unnamed)"} " +
-                $"identity={(authentication.IsEditor ? "editor-token" : "client-user")} " +
-                $"method={envelope.Method} target={target} " +
-                $"status={outcome.StatusCode} durationMs={elapsedMs}");
+            McpLog.Audit(McpAuditLine.Format(authentication.UserName, authentication.Client.Id, authentication.IsEditor,
+                envelope.Method, target, outcome.StatusCode, elapsedMs, directChange));
         }
 
         private static IReadOnlyDictionary<string, string> Header(string name, string value) =>

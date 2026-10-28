@@ -18,7 +18,7 @@ namespace SitecoreMcp.Server.Tools.Items
     /// Moves an item under a new parent, guarding against collisions, moves into its own subtree,
     /// missing rights and crossing content roots. A direct change: it runs only once confirmed.
     /// </summary>
-    public sealed class MoveItemTool : McpTool<MoveItemArgs>
+    public sealed class MoveItemTool : McpTool<MoveItemArgs>, IDirectChangeDescription
     {
         /// <inheritdoc />
         public override string Name => "sitecore_move_item";
@@ -33,6 +33,14 @@ namespace SitecoreMcp.Server.Tools.Items
             "move would cross content roots, or if the editor may not delete the item or create under " +
             "the destination. This is a direct change: called without a confirmationToken it only " +
             "returns a preview and changes nothing; the move runs once the editor has confirmed.";
+
+        /// <inheritdoc />
+        public string DescriptionWithoutConfirmation =>
+            "Move a Sitecore item to a new parent. Fails if the destination already has a child with " +
+            "the same name, if the destination is the item itself or one of its descendants, if the " +
+            "move would cross content roots, or if the user may not delete the item or create under " +
+            "the destination. The move runs on the first call; the result's directChange.summary says " +
+            "where the item went.";
 
         /// <inheritdoc />
         protected override McpToolResult Execute(MoveItemArgs args, McpCallContext context)

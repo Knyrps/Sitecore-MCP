@@ -3,6 +3,7 @@ using Newtonsoft.Json.Linq;
 using SitecoreMcp.Server.Protocol;
 using SitecoreMcp.Server.Security;
 using SitecoreMcp.Server.Tools.Confirmation;
+using SitecoreMcp.Server.Transport;
 using Xunit;
 
 namespace SitecoreMcp.Server.Portable.Tests.Tools
@@ -164,5 +165,128 @@ namespace SitecoreMcp.Server.Portable.Tests.Tools
             Assert.Equal(0, change.Runs);
             Assert.True(result.IsError);
         }
-    }
+    
+        // Per-client confirmation: a fixed-user client (an IDE agent with its own permission prompts)
+        // runs direct changes on the first call; an editor-token client (CorePilot) always confirms.
+
+        public static TheoryData<string> DirectChangeTools => new TheoryData<string>
+        {
+            "sitecore_delete_item", "sitecore_move_item", "sitecore_rename_item", "sitecore_publish_item",
+            "sitecore_invoke_workflow", "sitecore_update_item", "sitecore_reset_item_fields"
+        };
+
+        private static McpClient FixedUserClient(bool? confirmDirectChanges) =>
+            new McpClientFactory(name => "key").Create(new McpClientDefinition
+            {
+                Id = "sitecore-blickle", KeyEnvVar = "KEY", User = "sitecore\\blickle", AllowWrites = true,
+                ConfirmDirectChanges = confirmDirectChanges
+            }).Client;
+
+        private static McpToolResult CallAs(McpClient client, string tool, DeleteArgs args, Change change,
+            Action<DirectChangeOutcome> outcome = null) =>
+            DirectChangeGate.Run(client.ConfirmDirectChanges, new ConfirmationService(clock: () => Now), tool, Editor, args,
+                args.ConfirmationToken, Preview(), change.Run, outcome);
+
+        [Theory]
+        [MemberData(nameof(DirectChangeTools))]
+        public void A_fixed_user_clients_direct_change_runs_on_the_first_call(string tool)
+        {
+            var change = new Change();
+
+            var result = CallAs(FixedUserClient(null), tool, new DeleteArgs { Path = "/sitecore/content/Home/About" }, change);
+
+            Assert.Equal(1, change.Runs);
+            Assert.False(result.IsError);
+            Assert.NotEqual("confirmationRequired", (string)result.StructuredContent?["status"]);
+        }
+
+        [Theory]
+        [MemberData(nameof(DirectChangeTools))]
+        public void A_fixed_user_client_that_opted_in_gets_a_preview_first(string tool)
+        {
+            var change = new Change();
+
+            var result = CallAs(FixedUserClient(true), tool, new DeleteArgs { Path = "/sitecore/content/Home/About" }, change);
+
+            Assert.Equal(0, change.Runs);
+            Assert.Equal("confirmationRequired", (string)result.StructuredContent["status"]);
+        }
+
+        [Fact]
+        public void An_editor_token_client_gets_a_preview_first()
+        {
+            var change = new Change();
+            var corepilot = new McpClientFactory(name => "key").Create(new McpClientDefinition
+            {
+                Id = "corepilot", KeyEnvVar = "KEY", RequiresEditorToken = true, AllowWrites = true
+            }).Client;
+
+            var result = CallAs(corepilot, Tool, new DeleteArgs { Path = "/a" }, change);
+
+            Assert.Equal(0, change.Runs);
+            Assert.Equal("confirmationRequired", (string)result.StructuredContent["status"]);
+        }
+
+        [Fact]
+        public void Without_confirmation_the_result_still_says_what_changed()
+        {
+            var result = CallAs(FixedUserClient(false), Tool, new DeleteArgs { Path = "/sitecore/content/Home/About" }, new Change());
+
+            Assert.Equal("Delete '/sitecore/content/Home/About' and its 3 descendants (moved to the recycle bin).",
+                (string)result.StructuredContent["directChange"]["summary"]);
+            Assert.Equal("skipped", (string)result.StructuredContent["directChange"]["confirmation"]);
+            var text = string.Concat(result.Content.ConvertAll(c => c.Text));
+            Assert.Contains("Delete '/sitecore/content/Home/About' and its 3 descendants", text);
+            Assert.Contains("deleted", text);
+        }
+
+        [Fact]
+        public void Without_confirmation_a_passed_token_is_ignored()
+        {
+            var change = new Change();
+
+            var result = CallAs(FixedUserClient(false), Tool, new DeleteArgs { Path = "/a", ConfirmationToken = "made-up" }, change);
+
+            Assert.Equal(1, change.Runs);
+            Assert.False(result.IsError);
+        }
+
+        [Fact]
+        public void Without_confirmation_no_confirmation_service_is_needed()
+        {
+            var change = new Change();
+
+            var result = DirectChangeGate.Run(false, null, Tool, Editor, new DeleteArgs { Path = "/a" }, null, Preview(), change.Run);
+
+            Assert.Equal(1, change.Runs);
+            Assert.False(result.IsError);
+        }
+
+        [Fact]
+        public void A_failed_change_without_confirmation_is_reported_as_it_failed()
+        {
+            var result = DirectChangeGate.Run(false, null, Tool, Editor, new DeleteArgs { Path = "/a" }, null, Preview(),
+                () => McpToolResult.Failure("Not permitted."));
+
+            Assert.True(result.IsError);
+            Assert.Equal("Not permitted.", result.Content[0].Text);
+        }
+
+        [Fact]
+        public void The_gate_reports_how_each_call_was_confirmed()
+        {
+            var outcomes = new System.Collections.Generic.List<DirectChangeOutcome>();
+            var confirmations = new ConfirmationService(clock: () => Now);
+            McpToolResult Run(bool required, string token) => DirectChangeGate.Run(required, confirmations, Tool, Editor,
+                new DeleteArgs { Path = "/a", ConfirmationToken = token }, token, Preview(), new Change().Run, outcomes.Add);
+
+            Run(false, null);
+            var token = TokenFrom(Run(true, null));
+            Run(true, token);
+            Run(true, token);
+
+            Assert.Equal(new[] { DirectChangeOutcome.Skipped, DirectChangeOutcome.Previewed, DirectChangeOutcome.Confirmed, DirectChangeOutcome.Rejected },
+                outcomes);
+        }
+}
 }

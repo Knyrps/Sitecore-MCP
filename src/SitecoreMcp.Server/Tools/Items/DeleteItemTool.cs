@@ -19,7 +19,7 @@ namespace SitecoreMcp.Server.Tools.Items
     /// A direct change: the first call returns a preview and a confirmation token, and the delete runs
     /// only when the call is repeated with that token.
     /// </summary>
-    public sealed class DeleteItemTool : McpTool<DeleteItemArgs>
+    public sealed class DeleteItemTool : McpTool<DeleteItemArgs>, IDirectChangeDescription
     {
         private const int DescendantCountLimit = 1000;
 
@@ -35,6 +35,13 @@ namespace SitecoreMcp.Server.Tools.Items
             "destroy it and its descendants irreversibly. This is a direct change: called without a " +
             "confirmationToken it only returns a preview (what would be deleted, how many descendants " +
             "and referrers) and changes nothing; the delete runs once the editor has confirmed.";
+
+        /// <inheritdoc />
+        public string DescriptionWithoutConfirmation =>
+            "Delete a Sitecore item. By default it is recycled (recoverable); pass permanent=true to " +
+            "destroy it and its descendants irreversibly. The delete runs on the first call; the result's " +
+            "directChange.summary says what was deleted (descendants and referrers that now break). Check " +
+            "referrers first with sitecore_get_item_referrers.";
 
         /// <inheritdoc />
         protected override McpToolResult Execute(DeleteItemArgs args, McpCallContext context)

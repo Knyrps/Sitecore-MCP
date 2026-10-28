@@ -44,7 +44,7 @@ namespace SitecoreMcp.Server.Tools.Publishing
     /// Publishes an item to the configured publishing targets. Publishing runs as a background job,
     /// so this returns as soon as the job has started; the caller polls the returned handle.
     /// </summary>
-    public sealed class PublishItemTool : McpTool<PublishItemArgs>
+    public sealed class PublishItemTool : McpTool<PublishItemArgs>, IDirectChangeDescription
     {
         /// <inheritdoc />
         public override string Name => "sitecore_publish_item";
@@ -61,6 +61,15 @@ namespace SitecoreMcp.Server.Tools.Publishing
             "the client's permitted databases. This is a direct change: called without a confirmationToken " +
             "it only returns a preview (what goes live, where, in which languages) and publishes nothing; " +
             "the publish starts once the editor has confirmed.";
+
+        /// <inheritdoc />
+        public string DescriptionWithoutConfirmation =>
+            "Publish a Sitecore item from its database to the publishing targets (typically web), " +
+            "optionally including descendants and related items. Content written to master is not " +
+            "live until it is published. This starts a background job on the first call and returns its " +
+            "handle immediately — poll sitecore_get_jobs to see whether it finished. Targets are subject " +
+            "to the client's permitted databases. The result's directChange.summary says what goes live, " +
+            "where and in which languages.";
 
         /// <inheritdoc />
         protected override McpToolResult Execute(PublishItemArgs args, McpCallContext context)
