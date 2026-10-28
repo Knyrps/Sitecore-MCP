@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using SitecoreMcp.Server.Schema;
+using SitecoreMcp.Server.Tools.Confirmation;
 using Xunit;
 
 namespace SitecoreMcp.Server.Tests.Tools
@@ -35,5 +36,17 @@ namespace SitecoreMcp.Server.Tests.Tools
             var required = schema["required"]?.Select(token => (string)token) ?? Enumerable.Empty<string>();
             Assert.DoesNotContain("confirmationToken", required);
         }
-    }
+    
+        [Theory]
+        [MemberData(nameof(DirectChangeTools))]
+        public void Direct_change_tools_describe_themselves_to_clients_without_confirmation(string toolName)
+        {
+            var tool = ToolCatalog.All.Single(t => string.Equals(t.Name, toolName, StringComparison.Ordinal));
+
+            var described = Assert.IsAssignableFrom<IDirectChangeDescription>(tool);
+            Assert.False(string.IsNullOrWhiteSpace(described.DescriptionWithoutConfirmation));
+            Assert.DoesNotContain("confirm", described.DescriptionWithoutConfirmation, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("preview", described.DescriptionWithoutConfirmation, StringComparison.OrdinalIgnoreCase);
+        }
+}
 }

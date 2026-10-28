@@ -60,6 +60,8 @@ environment patch you own, e.g. `App_Config/Include/zzz/SitecoreMcp.Environment.
         <!-- One client per person or purpose; the key lives in the environment variable named here. -->
         <client id="alice" keyEnvVar="SITECORE_MCP_KEY_ALICE" user="sitecore\svc-mcp-alice"
                 allowWrites="true" databases="master" />
+        <!-- Optional: confirmDirectChanges="true" makes delete/move/rename/publish/workflow/shared-field
+             writes return a preview first and run only when repeated with its token. -->
       </clients>
     </sitecoreMcp>
   </sitecore>
@@ -68,7 +70,10 @@ environment patch you own, e.g. `App_Config/Include/zzz/SitecoreMcp.Environment.
 
 Each `<client>` needs a unique `id` (Sitecore's config merge collapses siblings without one). Give each person their own
 client so the audit log means something, and scope the mapped **Sitecore user's** rights; `allowWrites` and `databases`
-are a coarser fence on top. For a client embedded in the Content Editor, see [Editor tokens](#editor-tokens).
+are a coarser fence on top. A fixed-user client runs direct changes (delete, move, rename, publish, workflow commands,
+shared-field writes) on the first call, since its own tool (Claude Code, an IDE) asks the person before a call; set
+`confirmDirectChanges="true"` on the client, or the `Mcp.ConfirmDirectChanges` setting for every fixed-user client, to
+require a confirmation step instead. For a client embedded in the Content Editor, see [Editor tokens](#editor-tokens).
 
 ### 3. Set the key
 
@@ -123,13 +128,13 @@ committed config.
 | **Authentication** | A key from an environment variable maps to one client, compared in constant time. Rate-limited per effective user. |
 | **Identity** | Calls run as the client's fixed user, or, for an editor-token client, as the editor named by a valid editor token, with no fallback. `SecurityDisabler` is never used. |
 | **Writes** | Off globally *and* per client by default; write tools are hidden from `tools/list` unless both are on. |
-| **Direct changes** | Delete, move, rename, publish, workflow commands, and writes to shared or unversioned fields need confirmation. Called without `confirmationToken`, the tool validates, returns a preview and a single-use, expiring token, and changes nothing; the same call with that token runs it. A host app can keep the token from the model, so only a person confirms. |
+| **Direct changes** | Delete, move, rename, publish, workflow commands, and writes to shared or unversioned fields. Per client (`confirmDirectChanges`): with confirmation, a call without `confirmationToken` validates, returns a preview and a single-use, expiring token, and changes nothing; the same call with that token runs it, and a host app can keep the token from the model so only a person confirms. Editor-token clients always confirm (one set to `false` is skipped at startup). Fixed-user clients default to no confirmation (`Mcp.ConfirmDirectChanges`): the change runs on the first call, with every other check intact, and is audited as `confirmed=skipped`. |
 | **Content scope** | Optional content roots (where items may change), search roots and hidden fields, globally or per client. See [Content scope](#content-scope). |
 | **New items and versions** | Created with Sitecore's workflow context on, then checked: an item whose template or item has a workflow lands in the workflow's initial state, never stateless (Sitecore treats a workflow item without a state as approved). Statistics and owner are the calling user. Details in [TOOL_GUIDE](docs/TOOL_GUIDE.md#new-items-and-versions--workflow-state-and-statistics). |
 | **Databases** | Allow-listed per client. |
 | **Admin gate** | Schema, security and dev/ops tools need an administrator and are hidden from others. Config can add an admin requirement (`admin="true"` on a `<tool>`) but never remove one. |
 | **Transport** | HTTPS required by default, plus Origin, client-address (`<allowedAddresses>`, localhost by default), body-size and media-type gates; `<trustedProxies>` for `X-Forwarded-For`. |
-| **Audit** | Every call is logged to `mcp.log`: user, client, identity source, tool, target, status, duration. |
+| **Audit** | Every call is logged to `mcp.log`: user, client, identity source, tool, target, status, duration, and for a direct change how it was confirmed (`confirmed=pending\|yes\|rejected\|skipped`). |
 
 **Per environment:** local dev may use an admin user with `Mcp.RequireHttps=false` and `Mcp.VerboseErrors=true`. Shared
 dev/QA: one limited user per developer, `databases="master"`. Staging: read-only or off. **Production: off.**
@@ -137,7 +142,8 @@ dev/QA: one limited user per developer, `databases="master"`. Staging: read-only
 ### Editor tokens
 
 A client inside the Content Editor (CorePilot) should act as the editor using it, not a service account. Configure it
-with `requiresEditorToken="true"` and **no** `user` (a client with both is skipped at startup):
+with `requiresEditorToken="true"` and **no** `user` (a client with both is skipped at startup). Its direct changes always
+need confirmation; `confirmDirectChanges="false"` on it is refused and the client is skipped:
 
 ```xml
 <client id="corepilot" keyEnvVar="SITECORE_MCP_KEY_COREPILOT" requiresEditorToken="true" allowWrites="true" databases="master" />
@@ -202,10 +208,10 @@ All under `<sitecore><settings>`.
 | Certificate error (`CRYPT_E_NO_REVOCATION_CHECK`, self-signed) | A dev certificate; see [Verify](#4-verify). |
 | `401` for a key that should work | The pool was recycled instead of stopped and started, `keyEnvVar` is unset, or a shell variable did not expand. |
 | `401` "A valid editor token is required" | Send `X-Mcp-Editor-Token`; the message says whether it was missing, expired, for another client or badly signed, or that the secret is unset. |
-| An editor-token client never authenticates | It was skipped at startup (it has a `user`, or no `id`); see `mcp.log`. |
+| An editor-token client never authenticates | It was skipped at startup (it has a `user`, `confirmDirectChanges="false"`, or no `id`); see `mcp.log`. |
 | Only one client works | Each `<client>` needs a unique `id`. |
 | Tool missing from `tools/list` | Write-gated (`Mcp.AllowWrites` and the client's `allowWrites`) or admin-gated. |
-| A write returns `confirmationRequired` | Expected for direct changes; repeat the call with the returned `confirmationToken` after a person confirms. |
+| A write returns `confirmationRequired` | The client confirms direct changes (always for an editor-token client; for a fixed-user client only with `confirmDirectChanges="true"` or `Mcp.ConfirmDirectChanges`). Repeat the call with the returned `confirmationToken` after a person confirms, or turn confirmation off for that fixed-user client. `sitecore_get_context` shows `confirmDirectChanges`. |
 | `429` / `503` "server is busy" | Rate limit or `Mcp.MaxConcurrentCalls`; raise them or pace the calls. |
 | Endpoint returns HTML | The app is restarting or the route is not registered; check the Sitecore log. |
 

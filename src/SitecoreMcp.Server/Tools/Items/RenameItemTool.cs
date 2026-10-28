@@ -18,7 +18,7 @@ namespace SitecoreMcp.Server.Tools.Items
     /// Renames an item, validating the name and guarding against a sibling collision, missing rename
     /// rights and content-root boundaries. A direct change: it runs only once confirmed.
     /// </summary>
-    public sealed class RenameItemTool : McpTool<RenameItemArgs>
+    public sealed class RenameItemTool : McpTool<RenameItemArgs>, IDirectChangeDescription
     {
         /// <inheritdoc />
         public override string Name => "sitecore_rename_item";
@@ -32,6 +32,12 @@ namespace SitecoreMcp.Server.Tools.Items
             "editor may not rename the item, or the item is outside (or is itself) a content root. This " +
             "is a direct change: called without a confirmationToken it only returns a preview and " +
             "changes nothing; the rename runs once the editor has confirmed.";
+
+        /// <inheritdoc />
+        public string DescriptionWithoutConfirmation =>
+            "Rename a Sitecore item. Fails if the new name is invalid, a sibling already uses it, the " +
+            "user may not rename the item, or the item is outside (or is itself) a content root. The " +
+            "rename runs on the first call; the result's directChange.summary says the old and new path.";
 
         /// <inheritdoc />
         protected override McpToolResult Execute(RenameItemArgs args, McpCallContext context)

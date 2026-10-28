@@ -29,7 +29,7 @@ namespace SitecoreMcp.Server.Tools.Items
     /// values. This is the un-override that update_item cannot do: update writes a value, while reset
     /// removes the local value so the field inherits again.
     /// </summary>
-    public sealed class ResetItemFieldsTool : McpTool<ResetItemFieldsArgs>
+    public sealed class ResetItemFieldsTool : McpTool<ResetItemFieldsArgs>, IDirectChangeDescription
     {
         /// <inheritdoc />
         public override string Name => "sitecore_reset_item_fields";
@@ -46,6 +46,16 @@ namespace SitecoreMcp.Server.Tools.Items
             "reads back with a local value (re-applied by a save handler) is listed in notPersisted. " +
             "Resetting a shared or unversioned field is a direct change: it first returns a preview and " +
             "changes nothing until the editor has confirmed.";
+
+        /// <inheritdoc />
+        public string DescriptionWithoutConfirmation =>
+            "Reset an item's fields to their template's standard-values inheritance, discarding the " +
+            "item's own values (the opposite of update_item, which sets a value). Name the fields, or " +
+            "omit them to reset every locally-set content field. A named field that is already " +
+            "inherited is left alone. After saving it verifies each reset actually took: a field that " +
+            "reads back with a local value (re-applied by a save handler) is listed in notPersisted. " +
+            "The reset runs on the first call; resetting a shared or unversioned field is live for every " +
+            "version at once, and the result's directChange.summary then lists those changes.";
 
         /// <inheritdoc />
         protected override McpToolResult Execute(ResetItemFieldsArgs args, McpCallContext context)

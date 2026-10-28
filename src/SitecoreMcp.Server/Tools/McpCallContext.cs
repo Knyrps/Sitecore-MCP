@@ -60,14 +60,22 @@ namespace SitecoreMcp.Server.Tools
         /// </summary>
         public IContentRootBoundary ContentRoots { get; set; } = UnrestrictedContentRoots.Instance;
 
+        /// <summary>Whether direct changes need confirmation on this call: the calling client's setting.</summary>
+        public bool ConfirmDirectChanges => Client.ConfirmDirectChanges;
+
+        /// <summary>How this call's direct change went through confirmation, for the audit log; null when it made none.</summary>
+        public DirectChangeOutcome? DirectChange { get; private set; }
+
         /// <summary>
         /// Runs a direct change through server-enforced confirmation: without a token the preview and a
         /// single-use token come back and nothing changes; with the token from that same preview the
-        /// change runs. See <see cref="DirectChangeGate"/>.
+        /// change runs. For a client that does not confirm direct changes the change runs at once (every
+        /// guard the tool applied before this call still holds). See <see cref="DirectChangeGate"/>.
         /// </summary>
         public McpToolResult ConfirmDirectChange(
             string tool, object arguments, string confirmationToken, DirectChangePreview preview, System.Func<McpToolResult> change) =>
-            DirectChangeGate.Run(Confirmations, tool, User?.Name, arguments, confirmationToken, preview, change);
+            DirectChangeGate.Run(ConfirmDirectChanges, Confirmations, tool, User?.Name, arguments, confirmationToken, preview, change,
+                outcome => DirectChange = outcome);
 
         /// <summary>
         /// Resolves a database by name, defaulting to master when none is given, and rejecting one

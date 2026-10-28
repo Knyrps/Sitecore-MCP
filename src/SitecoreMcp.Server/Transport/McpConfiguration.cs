@@ -42,10 +42,13 @@ namespace SitecoreMcp.Server.Transport
                 Databases = XmlUtil.GetAttribute("databases", node),
                 ContentRoots = XmlUtil.GetAttribute("contentRoots", node),
                 SearchRoots = XmlUtil.GetAttribute("searchRoots", node),
-                HiddenFields = XmlUtil.GetAttribute("hiddenFields", node)
+                HiddenFields = XmlUtil.GetAttribute("hiddenFields", node),
+                ConfirmDirectChanges = OptionalBool(XmlUtil.GetAttribute("confirmDirectChanges", node), "confirmDirectChanges")
             };
 
-            var creation = new McpClientFactory(Environment.GetEnvironmentVariable).Create(definition);
+            // Mcp.ConfirmDirectChanges is the default for fixed-user clients only; editor-token clients always confirm.
+            var creation = new McpClientFactory(Environment.GetEnvironmentVariable,
+                Settings.GetBoolSetting("Mcp.ConfirmDirectChanges", false)).Create(definition);
             if (!creation.Succeeded)
             {
                 McpLog.Warn(creation.Error);
@@ -202,6 +205,22 @@ namespace SitecoreMcp.Server.Transport
             EditorTokenEndpointPath = Settings.GetSetting("Mcp.EditorToken.EndpointPath", "sitecore/api/sitecore-mcp/editor-token"),
             EditorTokenDomains = Settings.GetSetting("Mcp.EditorToken.AllowedDomains", "sitecore")
         };
+
+        /// <summary>
+        /// Reads an optional true/false attribute: null when absent. Any other value is logged and read as
+        /// true, so a typo never switches a safety check off.
+        /// </summary>
+        private static bool? OptionalBool(string value, string attribute)
+        {
+            if (string.IsNullOrWhiteSpace(value)) return null;
+            if (string.Equals(value.Trim(), "false", StringComparison.OrdinalIgnoreCase)) return false;
+            if (!string.Equals(value.Trim(), "true", StringComparison.OrdinalIgnoreCase))
+            {
+                McpLog.Warn($"{attribute}=\"{value}\" is neither true nor false; reading it as true.");
+            }
+
+            return true;
+        }
 
         private static bool IsTrue(string value) =>
             string.Equals(value, "true", StringComparison.OrdinalIgnoreCase);

@@ -35,6 +35,8 @@
 
     <sitecoreMcp>
       <clients>
+        <!-- A fixed-user client: direct changes run on the first call. Add confirmDirectChanges="true"
+             to get a preview and confirmation token first, as CorePilot does. -->
         <client id="admin" keyEnvVar="SITECORE_MCP_KEY" user="sitecore\admin" allowWrites="true"
           databases="master|web|core" />
       </clients>

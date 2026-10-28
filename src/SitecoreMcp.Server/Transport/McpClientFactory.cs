@@ -39,6 +39,12 @@ namespace SitecoreMcp.Server.Transport
 
         /// <summary>The client's hidden fields (names or IDs), pipe-separated; added to the global list.</summary>
         public string HiddenFields { get; set; }
+
+        /// <summary>
+        /// The confirmDirectChanges attribute; null when absent. An editor-token client always confirms
+        /// (false is refused); a fixed-user client falls back to the factory's default.
+        /// </summary>
+        public bool? ConfirmDirectChanges { get; set; }
     }
 
     /// <summary>The client built from a definition, or why the definition was refused.</summary>
@@ -67,16 +73,24 @@ namespace SitecoreMcp.Server.Transport
     /// <summary>
     /// Applies the client rules to a config definition. Kept free of Sitecore so the rules are
     /// unit-testable: a keyless client is never registered, every client has exactly one identity
-    /// source (a fixed user or an editor token, never both), and the database list defaults to master.
+    /// source (a fixed user or an editor token, never both), an editor-token client always confirms
+    /// direct changes, and the database list defaults to master.
     /// </summary>
     public sealed class McpClientFactory
     {
         private readonly Func<string, string> _readEnvironment;
+        private readonly bool _confirmDirectChangesByDefault;
 
         /// <summary>Creates the factory over a reader for environment variables (key lookup).</summary>
-        public McpClientFactory(Func<string, string> readEnvironment)
+        /// <param name="readEnvironment">Reads an environment variable by name.</param>
+        /// <param name="confirmDirectChangesByDefault">
+        /// Whether a fixed-user client without a confirmDirectChanges attribute confirms direct changes
+        /// (the Mcp.ConfirmDirectChanges setting). Editor-token clients always confirm.
+        /// </param>
+        public McpClientFactory(Func<string, string> readEnvironment, bool confirmDirectChangesByDefault = false)
         {
             _readEnvironment = readEnvironment ?? Environment.GetEnvironmentVariable;
+            _confirmDirectChangesByDefault = confirmDirectChangesByDefault;
         }
 
         /// <summary>Builds the client a definition describes, or reports why it must be skipped.</summary>
@@ -97,6 +111,14 @@ namespace SitecoreMcp.Server.Transport
                 {
                     return McpClientCreation.Fail(
                         $"Skipping client '{name}': a client with requiresEditorToken=\"true\" cannot have a fixed user (user=\"{definition.User}\"). Remove the user attribute; calls run as the editor named by the token.");
+                }
+
+                // CorePilot shows the editor every direct change before it runs; that guarantee rests on
+                // the server, so an editor-token client that tries to switch it off is refused outright.
+                if (definition.ConfirmDirectChanges == false)
+                {
+                    return McpClientCreation.Fail(
+                        $"Skipping client '{name}': a client with requiresEditorToken=\"true\" cannot set confirmDirectChanges=\"false\"; the editor must confirm its direct changes. Remove the attribute.");
                 }
 
                 if (string.IsNullOrEmpty(definition.Audience) && string.IsNullOrEmpty(definition.Id))
@@ -134,7 +156,8 @@ namespace SitecoreMcp.Server.Transport
                 ? McpClient.ForEditorToken(definition.Id, key,
                     string.IsNullOrEmpty(definition.Audience) ? definition.Id : definition.Audience,
                     definition.AllowWrites, databases, scope)
-                : McpClient.ForUser(definition.Id, key, definition.User, definition.AllowWrites, databases, scope));
+                : McpClient.ForUser(definition.Id, key, definition.User, definition.AllowWrites, databases, scope,
+                    definition.ConfirmDirectChanges ?? _confirmDirectChangesByDefault));
         }
 
         /// <summary>

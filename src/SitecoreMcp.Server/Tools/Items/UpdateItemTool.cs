@@ -22,7 +22,7 @@ namespace SitecoreMcp.Server.Tools.Items
     }
 
     /// <summary>Writes field values to an existing item, checking field-write permission first.</summary>
-    public sealed class UpdateItemTool : McpTool<UpdateItemArgs>
+    public sealed class UpdateItemTool : McpTool<UpdateItemArgs>, IDirectChangeDescription
     {
         /// <inheritdoc />
         public override string Name => "sitecore_update_item";
@@ -36,6 +36,13 @@ namespace SitecoreMcp.Server.Tools.Items
             "an unknown field or one you cannot write is rejected before anything is saved. Changing a " +
             "shared or unversioned field is a direct change (it is live for every version at once): such " +
             "an update first returns a preview and changes nothing until the editor has confirmed.";
+
+        /// <inheritdoc />
+        public string DescriptionWithoutConfirmation =>
+            "Update field values on an existing Sitecore item. Only the fields you pass are changed; " +
+            "an unknown field or one you cannot write is rejected before anything is saved. The update " +
+            "runs on the first call. Changing a shared or unversioned field is live for every version at " +
+            "once; the result's directChange.summary then lists those changes.";
 
         /// <inheritdoc />
         protected override McpToolResult Execute(UpdateItemArgs args, McpCallContext context)

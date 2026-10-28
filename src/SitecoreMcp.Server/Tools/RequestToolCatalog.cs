@@ -3,6 +3,7 @@ using Newtonsoft.Json.Linq;
 using SitecoreMcp.Server.Diagnostics;
 using SitecoreMcp.Server.Protocol;
 using SitecoreMcp.Server.Schema;
+using SitecoreMcp.Server.Tools.Confirmation;
 
 namespace SitecoreMcp.Server.Tools
 {
@@ -39,12 +40,13 @@ namespace SitecoreMcp.Server.Tools
                     continue;
                 }
 
-                descriptors.Add(new ToolDescriptor
+                // The wording follows the calling client's confirmation setting; the schema does not.
+                descriptors.Add(DirectChangeDescriptions.ForClient(new ToolDescriptor
                 {
                     Name = tool.Name,
                     Description = tool.Description,
                     InputSchema = JsonSchemaGenerator.Generate(tool.ArgumentType)
-                });
+                }, tool, _context.ConfirmDirectChanges));
             }
 
             return descriptors;

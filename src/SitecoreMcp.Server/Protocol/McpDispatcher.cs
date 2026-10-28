@@ -9,13 +9,24 @@ namespace SitecoreMcp.Server.Protocol
         private readonly IToolCatalog _catalog;
         private readonly string _serverName;
         private readonly string _serverVersion;
+        private readonly string _instructions;
 
         /// <summary>Creates a dispatcher over the given tool catalog, reporting the supplied server identity in initialize.</summary>
         public McpDispatcher(IToolCatalog catalog, string serverName, string serverVersion)
+            : this(catalog, serverName, serverVersion, McpServerInstructions.Text)
+        {
+        }
+
+        /// <summary>
+        /// Creates a dispatcher that also advertises the given instructions at initialize - built per call,
+        /// so they can match the calling client (see <see cref="McpServerInstructions.For"/>).
+        /// </summary>
+        public McpDispatcher(IToolCatalog catalog, string serverName, string serverVersion, string instructions)
         {
             _catalog = catalog ?? throw new ArgumentNullException(nameof(catalog));
             _serverName = serverName;
             _serverVersion = serverVersion;
+            _instructions = instructions ?? McpServerInstructions.Text;
         }
 
         /// <summary>Handles one request and returns the outcome to send, including 202 for notifications.</summary>
@@ -67,7 +78,7 @@ namespace SitecoreMcp.Server.Protocol
                     ["name"] = _serverName,
                     ["version"] = _serverVersion
                 },
-                ["instructions"] = McpServerInstructions.Text
+                ["instructions"] = _instructions
             };
         }
 

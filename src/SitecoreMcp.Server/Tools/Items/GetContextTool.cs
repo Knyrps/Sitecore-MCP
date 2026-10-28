@@ -23,7 +23,8 @@ namespace SitecoreMcp.Server.Tools.Items
         /// <inheritdoc />
         public override string Description =>
             "Report the current Sitecore instance, version, the user this client runs as, whether " +
-            "writes are allowed, and which databases and languages are available. Call this first.";
+            "writes are allowed, whether direct changes need confirmation, and which databases and " +
+            "languages are available. Call this first.";
 
         /// <inheritdoc />
         protected override McpToolResult Execute(GetContextArgs args, McpCallContext context)
@@ -51,6 +52,9 @@ namespace SitecoreMcp.Server.Tools.Items
                 ["user"] = context.User.Name,
                 ["isAdministrator"] = context.User.IsAdministrator,
                 ["allowWrites"] = context.AllowWrites,
+                // Whether direct changes (delete, move, rename, publish, workflow, shared-field writes) first
+                // return a preview and need a confirmation token, or run on the first call for this client.
+                ["confirmDirectChanges"] = context.ConfirmDirectChanges,
                 ["databases"] = databases,
                 ["languages"] = languages,
                 ["contentRoots"] = RootsOrNull(context.Scope.ContentRoots),
