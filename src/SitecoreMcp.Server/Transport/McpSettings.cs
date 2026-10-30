@@ -45,6 +45,16 @@ namespace SitecoreMcp.Server.Transport
         /// <summary>The largest encoded size, in bytes (before base64), of an image returned as image content.</summary>
         public long MaxImageBytes { get; set; } = 1024 * 1024;
 
+        /// <summary>
+        /// Mcp.Packages.AllowCode: whether sitecore_install_package may install code and configuration
+        /// files (/bin, App_Config, *.dll, *.config, *.aspx, *.cshtml, ...) and run a package post step.
+        /// Off by default.
+        /// </summary>
+        public bool PackagesAllowCode { get; set; }
+
+        /// <summary>Mcp.Packages.MaxDownloadBytes: the largest package sitecore_download_package returns (before base64).</summary>
+        public long MaxPackageDownloadBytes { get; set; } = 1024 * 1024;
+
         /// <summary>Whether full error detail is returned to the client. Should stay off outside development.</summary>
         public bool VerboseErrors { get; set; }
 

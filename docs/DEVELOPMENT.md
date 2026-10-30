@@ -21,7 +21,8 @@ Inside the server:
 | `Protocol/` | JSON-RPC 2.0 and MCP envelope. **No Sitecore references** — this is what keeps the unit tests runnable without an instance. |
 | `Transport/` | Route registration, `IHttpHandler`, request gates, authentication, configuration binding. |
 | `Tools/` | Tool framework: `IMcpTool`, `McpTool<TArgs>`, registry, per-call catalog, call context, paging. |
-| `Tools/Items`, `Tools/Templates`, `Tools/Presentation`, `Tools/Search`, `Tools/Membership`, `Tools/Workflow`, `Tools/Jobs`, `Tools/Publishing`, `Tools/Diagnostics` | Tools grouped by concern, each with its own resolver/describer helpers. |
+| `Tools/Items`, `Tools/Templates`, `Tools/Presentation`, `Tools/Search`, `Tools/Membership`, `Tools/Workflow`, `Tools/Jobs`, `Tools/Publishing`, `Tools/Diagnostics`, `Tools/Configuration`, `Tools/Packages` | Tools grouped by concern, each with its own resolver/describer helpers. |
+| `Tools/Configuration/Portable`, `Tools/Packages/Portable` | The decision logic of the config and package tools (XPath projection, redaction, role/layer rules, package names and paths, file classes, manifest, install policy). **No Sitecore references**; the whole folders are compiled into the portable tests. |
 | `Schema/` | Reflection-based POCO-to-JSON-Schema generator, driven by `[McpParam]`. |
 | `Security/` | Editor tokens: issuing, validation, and the issue policy. **No Sitecore references** — compiled into the portable tests. |
 
@@ -157,7 +158,7 @@ Two things the bridge must get right:
 
 ## Test coverage
 
-`dotnet test` runs 529 cases. Most are per-tool: every tool is discovered by reflection and fed
+`dotnet test` runs 579 cases. Most are per-tool: every tool is discovered by reflection and fed
 through the contract theories, so each one appears as its own test result.
 
 | Suite | Covers |
@@ -169,7 +170,9 @@ through the contract theories, so each one appears as its own test result.
 | `Portable.Tests/Security` | Editor tokens: issued token round-trips; missing, malformed, expired, not-yet-valid, wrong-issuer, wrong-audience, other-secret, tampered, and `alg: none` tokens are refused; issue policy (audience, domains). |
 | `Portable.Tests/Tools/WorkflowStartPolicyTests` | Whether a created item, version or copy is started in its workflow: no state, a final state or a copied state is started; the initial state is left alone; nothing without a workflow, in a database without a workflow provider, or on standard values/branch items; the item's own `__Workflow` wins over `__Default workflow`. |
 | `Portable.Tests/Transport` | Effective identity per request: an editor-token client runs as the token's editor and is refused without a valid token (or without a configured secret); fixed-user clients run as their user and ignore editor tokens. Client config rules: an editor-token client cannot have a fixed user, and always confirms direct changes (`confirmDirectChanges="false"` skips it); a fixed-user client defaults to no confirmation (`Mcp.ConfirmDirectChanges`). The audit line's `confirmed=` marker. |
-| `Portable.Tests/Tools/DirectChangeGateTests`, `DirectChangeDescriptionTests`, `Protocol/ServerInstructionsTests` | Confirmation tokens (preview, single use, expiry, binding); per client: a fixed-user client's direct change runs on the first call (token ignored, summary in `directChange`), an opted-in or editor-token client gets the preview; `tools/list` descriptions and initialize `instructions` per client, with unchanged schemas. |
+| `Portable.Tests/Tools/DirectChangeGateTests`, `DirectChangeDescriptionTests`, `Protocol/ServerInstructionsTests` | Confirmation tokens (preview, single use, expiry, binding); per client: a fixed-user client's direct change runs on the first call (token ignored, summary in `directChange`), an opted-in or editor-token client gets the preview; `tools/list` descriptions and initialize `instructions` per client, with unchanged schemas; an always-confirmed tool (package install) is listed unchanged to every client. |
+| `Portable.Tests/Tools/Configuration` | `sitecore_get_config`: XPath selection (elements and attributes), readable paths, node-only and depth pruning, patch sources kept or stripped, invalid and empty XPaths, node and character caps, secret redaction (attribute names, named settings, subtrees; names that only name a secret kept), the live document never changed; the role/layer view rules as showconfig builds them. |
+| `Portable.Tests/Tools/Packages` | Package file names stay in the packages folder; web-root paths; file classes (forbidden: web.config, connection strings, license, App_Data, keys, Sitecore-MCP's own files; code: /bin, App_Config, executable extensions); folder expansion with forbidden files skipped and a file cap; the manifest from entry keys (metadata, items with versions, files, blobs, security, author-set collision modes, unsafe and unknown entries); collision modes; the install policy (databases, code and post steps behind `Mcp.Packages.AllowCode`, content roots incl. existing items and files, empty packages, warnings). |
 
 The permission sets are deliberately spelled out rather than derived. They are security decisions, so
 removing a gate should fail a test instead of passing quietly.
@@ -231,6 +234,30 @@ state Approved), calling as a non-admin editor:
    in the Content Editor.
 7. The same create in the `web` database (if the client may write there) starts nothing
    (`workflow.reason: workflowsUnavailable`).
+
+### Manual check: configuration and packages (10.3 and 10.4)
+
+Only an instance proves the Sitecore-coupled halves. As an administrator client with writes on:
+
+1. `sitecore_get_config` with `/sitecore/settings/setting[@name='Mcp.Enabled']` — value and `patchSources`
+   match showconfig.aspx; `//pipelines/httpRequestBegin` with `depth: 1`; an invalid XPath and a
+   no-match XPath fail clearly; a setting holding a password reads `[redacted]`.
+2. The same XPath with `rules: {"role": "ContentDelivery"}` and with `layers: "Sitecore"` — compare with
+   `showconfig.aspx?role=ContentDelivery` and `?layer=Sitecore`; an unknown rule/layer is refused.
+3. `sitecore_create_package` with an item (single and with subitems) and `/App_Config/Include` as a file
+   source: `ConnectionStrings.config` is not in it (and `/web.config` as a source is refused); the zip opens in
+   the Installation Wizard and, with `saveProject`, the project opens in the Package Designer.
+4. `sitecore_inspect_package` on it and on a wizard-built package: items, versions, files, collisions.
+5. `sitecore_install_package` with a fixed-user client whose `confirmDirectChanges="false"`: the first call
+   is a preview (audit `confirmed=pending`); repeating with the token installs; existing items are left
+   untouched under the default `skip`; `merge` replaces same-numbered versions; the job shows in
+   `sitecore_get_jobs` (category `packageInstall`); an entry appears under
+   `/sitecore/system/Packages/Installation history` in core.
+6. Refusals: a package with a `/bin` DLL while `Mcp.Packages.AllowCode` is false; a package into `web` for a
+   master-only client; a client with content roots and a package item outside them.
+7. A large package (a few thousand items) returns the job handle after 20 s and finishes in the background.
+8. `sitecore_upload_package` / `sitecore_download_package` round-trip a small zip; an oversized download is
+   refused naming `Mcp.Packages.MaxDownloadBytes`.
 
 Two habits that repeatedly caught real bugs:
 

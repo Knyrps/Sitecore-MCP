@@ -33,6 +33,19 @@ namespace SitecoreMcp.Server.Portable.Tests.Tools
             }
         };
 
+        private sealed class InstallPackageTool : IAlwaysConfirmedDirectChange
+        {
+        }
+
+        [Fact]
+        public void A_tool_that_always_confirms_is_listed_unchanged_even_for_a_client_without_confirmation()
+        {
+            var listed = DirectChangeDescriptions.ForClient(Delete(), new InstallPackageTool(), confirmDirectChanges: false);
+
+            Assert.True(JToken.DeepEquals(JObject.FromObject(Delete()), JObject.FromObject(listed)));
+            Assert.Equal(DirectChangeGate.TokenDescription, (string)listed.InputSchema["properties"]["confirmationToken"]["description"]);
+        }
+
         [Fact]
         public void A_confirming_client_sees_the_descriptions_unchanged()
         {

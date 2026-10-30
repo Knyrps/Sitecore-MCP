@@ -33,6 +33,9 @@
     <Compile Include="..\..\src\SitecoreMcp.Server\Tools\Confirmation\*.cs" Link="Linked\Tools\Confirmation\%(Filename)%(Extension)" />
     <Compile Include="..\..\src\SitecoreMcp.Server\Tools\Workflow\WorkflowStartPolicy.cs" Link="Linked\Tools\Workflow\WorkflowStartPolicy.cs" />
     <Compile Include="..\..\src\SitecoreMcp.Server\Tools\Search\NameTerms.cs" Link="Linked\Tools\Search\NameTerms.cs" />
+    <!-- Config and package decision logic: Sitecore-free by design (the tools around them are thin). -->
+    <Compile Include="..\..\src\SitecoreMcp.Server\Tools\Configuration\Portable\*.cs" Link="Linked\Tools\Configuration\%(Filename)%(Extension)" />
+    <Compile Include="..\..\src\SitecoreMcp.Server\Tools\Packages\Portable\*.cs" Link="Linked\Tools\Packages\%(Filename)%(Extension)" />
     <Compile Include="..\SitecoreMcp.Server.Tests\Support\FakeHttpRequest.cs" Link="Support\FakeHttpRequest.cs" />
     <Compile Include="..\SitecoreMcp.Server.Tests\Support\FakeToolCatalog.cs" Link="Support\FakeToolCatalog.cs" />
     <!-- The pre-existing key-authentication tests, so fixed-user behaviour is pinned off Windows too. -->
