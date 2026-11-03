@@ -29,6 +29,15 @@ Both can also be passed as arguments.
    response produces no stdout line at all. Stray stdout output is the most common way stdio
    bridges break clients.
 
+## Starting before Sitecore is up
+
+If the endpoint cannot be reached at `initialize` (connection refused, 10 s timeout, or a non-JSON
+startup page), the bridge answers `initialize` itself instead of failing, so the client stays
+connected. Until Sitecore answers, `tools/list` is empty, `ping` succeeds, and `tools/call` returns an
+error result. The bridge replays `initialize` every 5 s; once it succeeds it sends
+`notifications/tools/list_changed` and the client fetches the real tools. `tools.listChanged` is
+always advertised, so the client knows to listen for it.
+
 ## Building
 
 ```powershell
