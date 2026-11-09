@@ -78,6 +78,17 @@ namespace SitecoreMcp.Server.Tools
                 outcome => DirectChange = outcome);
 
         /// <summary>
+        /// Runs a direct change that always needs confirmation, whatever the calling client's setting (a
+        /// package install can deploy code and restart the site). Same gate as <see cref="ConfirmDirectChange"/>
+        /// with confirmation required; the tool implements <see cref="IAlwaysConfirmedDirectChange"/> so it
+        /// is described the same way to every client.
+        /// </summary>
+        public McpToolResult ConfirmDirectChangeAlways(
+            string tool, object arguments, string confirmationToken, DirectChangePreview preview, System.Func<McpToolResult> change) =>
+            DirectChangeGate.Run(true, Confirmations, tool, User?.Name, arguments, confirmationToken, preview, change,
+                outcome => DirectChange = outcome);
+
+        /// <summary>
         /// Resolves a database by name, defaulting to master when none is given, and rejecting one
         /// outside the client's allow-list or one that does not exist. Throws
         /// <see cref="McpToolException"/> so the failure reaches the model.

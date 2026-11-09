@@ -111,7 +111,8 @@ correct `_name` field.
 
 Some changes take effect immediately and cannot be discarded: `delete_item`, `move_item`,
 `rename_item`, `publish_item`, `invoke_workflow`, and `update_item` / `reset_item_fields` **when they
-change a shared or unversioned field** are *direct changes*. Whether the server makes the editor
+change a shared or unversioned field** are *direct changes*. `install_package` is one too, and the only
+one that **always** needs confirmation, whatever the client (see *Packages* below). Whether the server makes the editor
 confirm them is a **per-client** setting, `confirmDirectChanges` on the `<client>`;
 `sitecore_get_context` reports it for the calling client, and the server `instructions` and tool
 descriptions are worded to match.
@@ -403,6 +404,146 @@ authoring database only — `sitecore_publish_item` is what pushes an item to th
 - **`get_logs`** — list the log files, or tail one (`file` is a name or prefix — `'log'`, `'mcp.log'`,
   `'Crawling'` — picking the most recent match) filtered by `level`/`search`. Only the final 1 MB is
   scanned. This reads Sitecore's own logs; the MCP audit trail is `mcp.log`.
+
+## Configuration — reading the merged config (admin-only)
+
+- **`get_config`** — the effective `<sitecore>` configuration, as `/sitecore/admin/showconfig.aspx` shows
+  it, read by **XPath**: `/sitecore/settings/setting[@name='Mcp.Enabled']`, `//pipelines/httpRequestBegin`,
+  `//sites/site[@name='website']`. Each matched node comes back as XML plus a summary: a readable `path`
+  (siblings told apart by `name`/`id`/`type`, else position), its `attributes`, `patchSources` (the
+  include file(s) that set it) and `childElements`. An XPath can also select an attribute (`.../@value`).
+- **Size.** `nodeOnly: true` returns the element with its attributes and no children; otherwise `depth`
+  (default 3, max 20) keeps that many levels and replaces deeper ones with an `omitted` comment.
+  `maxNodes` (default 20, max 200) and a 60,000-character cap bound the result; `truncated: true` says
+  something was cut. An invalid XPath or one that matches nothing is an error that says so.
+- **`includePatchSource: false`** strips the `patch:source` attributes for a cleaner read.
+- **Role/layer view.** `rules` (e.g. `{"role": "ContentDelivery"}`) and/or `layers`
+  (`Sitecore|Modules|Custom|Environment`) rebuild the configuration for that view, exactly as showconfig
+  does (decompiled Sitecore.Client 10.3.0 and 10.4.0, identical): a `RuleBasedConfigReader` over the
+  chosen layers' include files, with each requested rule as `name:define`, and rules you did not name
+  keeping this instance's value. Without either, the tool reads the live `Factory.GetConfiguration()`
+  document (the same one showconfig shows by default). A rebuild re-reads every include file, so it is
+  slower; an unknown rule or layer is refused with the known ones listed.
+- **Secrets are always redacted.** An attribute whose name contains `password`, `secret`, `key`, `token` or
+  `connectionString` — and the `value`/text of an element whose `name` does (`<setting
+  name="Payment.ApiKey" value="…"/>`) — reads `[redacted]`; `redactedValues` counts them. Names that only
+  *name* a secret (`connectionStringName`, `keyEnvVar`) are kept. **There is no switch to turn this off,
+  not even for administrators**, by decision: the merged configuration has `$(env:…)` variables already
+  resolved, so a secret injected through the environment appears in clear; everything a tool returns ends
+  up in the model provider's context and in client transcripts; and an administrator with a real need can
+  read the file on the server. An opt-out would make the safe behaviour depend on the model choosing it.
+
+### Temporary config overrides — evaluated, not built
+
+The idea was a managed patch file (`App_Config/Include/zzzz/SitecoreMcp.Overrides.config`) that
+Sitecore-MCP writes to set/patch an attribute or add/remove a node, temporarily. **Decision: not built.**
+It cannot be made both safe and simple:
+
+- **Every change restarts the site.** Any write under `App_Config` makes ASP.NET (and Sitecore's
+  `ConfigWatcher`) unload the app domain. The call that writes the file races the restart: its response
+  may be cut off, other requests in flight fail, and the CM is down for the minute or more a Sitecore
+  start takes. A tool could only answer "written; restart pending" and never verify its own result in the
+  same call.
+- **Config is code.** A patch can register any loaded type as a pipeline processor, event handler,
+  scheduled agent or provider, and can switch off security settings — including Sitecore-MCP's own
+  (`Mcp.*`, `<sitecoreMcp>`). Refusing those two names is not enough: `<pipelines>`, `<events>`,
+  `<settings name="IgnoreUrlPrefixes">`, `<authentication>` or a replaced `<sitecoreMcp>` type via
+  `patch:instead` on a parent all reach the same place. A deny-list over XPath targets is not a boundary.
+- **"Temporary" costs a second restart.** A TTL can only be enforced at startup (or by an agent that
+  deletes the file), and removing the file is another restart. If the site fails to start because of the
+  override, no MCP call can revert it — someone needs file access anyway.
+- **Multi-instance CM.** A file write lands on one instance: instances drift apart, and a load balancer
+  routes calls to whichever one. On Azure App Service the web root is shared, so every instance restarts
+  at once.
+- **Containers and read-only web roots.** In containers the file vanishes on the next container start
+  (the image is the source of truth); with a read-only web root (or `WEBSITE_RUN_FROM_PACKAGE`) the write
+  simply fails.
+- **Permissions.** On a typical IIS install the app-pool identity *can* write `App_Config` (it is commonly
+  given modify rights on the web root, which the Installation Wizard relies on); hardened installs and
+  containers often cannot. Where it can, that is exactly why this would be dangerous; where it cannot,
+  the tool would not work.
+
+A safer later version would need: a deploy-time allow-list of patchable settings (by exact name, values
+validated by type), never pipelines/events/types; changes written to a store that every instance reads
+(not the web root) and applied without a restart where Sitecore supports it (`Settings` values through a
+custom `SettingsProvider`-style layer), or a change queued for the next planned deploy; an explicit
+revert tool plus an expiry enforced off-box; and its own confirmation and audit trail. Until then,
+configuration changes go through the normal deployment pipeline, and `get_config` is the read side.
+
+## Packages — design, inspect, install (admin-only)
+
+Sitecore packages built and installed with Sitecore's own `Sitecore.Install` API (decompiled Kernel
+10.3.0 and 10.4.0; the only difference in this area is that 10.4 takes the version mode for new items
+from `Settings.VersionInstallModeForNewItems`), so the zips are what the Package Designer and Installation
+Wizard produce. Every package is addressed by **file name** inside the packages folder
+(`Settings.PackagePath`, by default `$(dataFolder)/packages`); no argument reaches another folder.
+
+| Tool | Gate | What it does |
+|---|---|---|
+| `list_packages` | admin | The `.zip` packages and saved `.xml` projects in the folder, newest first, with size and date; `includeMetadata` reads name/version/author of the 20 newest. |
+| `inspect_package` | admin | Metadata (name, version, author, publisher, readme, post step), items (database, path, ID, versions), files (with their class), counts, collisions with existing items and files, and whether `install_package` would accept it for this client — **without installing**. |
+| `create_package` | admin + write | Builds a package from metadata, `items` (`{path, database, subitems}`) and `files` (web-root files or folders); `saveProject` also writes the project XML (to `PackageProjectsFolder`) for the Package Designer. Refuses to replace an existing zip unless `overwrite`. Returns the name, size and a manifest read back from the written zip. |
+| `install_package` | admin + write, **always confirmed** | Installs a package with `Installer.InstallPackage`, as a Sitecore job. |
+| `upload_package` | admin + write | Stores a base64 zip in the folder after checking that Sitecore can read it as a package. Bounded by `Mcp.MaxRequestBytes` (about 700 KB of zip at the 1 MB default). |
+| `download_package` | admin + write | Returns a package as base64, up to `Mcp.Packages.MaxDownloadBytes` (default 1 MB). A package exports content, so this needs write permission like the other package tools. |
+
+Larger packages: copy them into (or out of) the packages folder directly; `list_packages` shows the
+folder's physical path.
+
+**Building.** Items are resolved like every other tool (path or ID, database on the client's
+allow-list) and read **as the calling user**, so only what that user can read is packaged. They go into
+one static item source built the way the Package Designer's "Add items statically" dialog builds it
+(single items as references, subtrees expanded, then collected into an `ExplicitItemSource`); every
+version and language is included. Files go into one static `ExplicitFileSource`; folders are expanded
+when the package is built, so the package holds exactly what the result lists. **Never packaged**, and a
+file source naming one is refused (inside a folder they are skipped and listed in `skippedFiles`):
+`web.config` (any level), `ConnectionStrings*.config`, `license.xml`, anything under `App_Data`,
+certificates and keys (`.pfx`, `.p12`, `.pem`, `.key`, `.snk`), `.env`/`.user`/`.publishsettings` files,
+and Sitecore-MCP's own assembly and configuration. Caps: 200 item sources, 5,000 files.
+
+**Installing — the rules, all checked before the preview.**
+
+- **Always confirmed**, even for a client with `confirmDirectChanges="false"`: an install creates and
+  replaces items wherever the package says, in any database it names, and (where allowed) deploys code
+  and restarts the site. That is more far-reaching than any single-item direct change, and a package is
+  opaque to the person approving a tool call in an IDE, so the server-side preview (what is in it, what
+  already exists, what the collision mode will do) is the check. The tool implements
+  `IAlwaysConfirmedDirectChange`: its description and `confirmationToken` argument are the same for
+  every client, and the server instructions say so. The token is bound to the arguments and to the zip's
+  name, size and timestamp, so replacing the package after the preview invalidates it.
+- **Collisions default to skip**: an existing item (same ID, or another item at the same path) and an
+  existing file are left untouched; only new ones are installed. `itemCollision` offers the wizard's
+  other choices — `merge` (replace versions with the same number), `mergeAppend`, `mergeClear` (replace
+  every version), `overwrite` (replace the item **and delete its children that are not in the package**),
+  `sideBySide` — and `fileCollision: overwrite` replaces files. Collision modes a package author fixed on
+  entries are stripped (the installer would otherwise prefer them over the caller's choice), and the
+  preview says how many there were.
+- **Never installed**: entries that would write outside the web root (`..`), and the forbidden files
+  above (web.config, connection strings, license, App_Data, keys, Sitecore-MCP's own files). A package
+  containing one is refused as a whole.
+- **Code needs `Mcp.Packages.AllowCode`** (default `false`): files under `/bin` or `App_Config`, and
+  `.dll`, `.exe`, `.config`, `.aspx`, `.ascx`, `.asax`, `.ashx`, `.asmx`, `.master`, `.cshtml`,
+  `.vbhtml`, `.svc`, `.ps1`, `.bat`, `.cmd` anywhere. Off, such a package is refused. It is the same
+  reasoning as for config overrides: these files are code execution and restart the site.
+- **Post steps** (a type or URL the installer runs afterwards) run only with `runPostStep: true` **and**
+  `Mcp.Packages.AllowCode`; otherwise the install goes ahead without it and the result says so.
+- **Databases**: every database the package installs into must be on the client's allow-list.
+- **Content roots**: when content roots apply to the client, every item in the package must lie inside
+  them, so must every existing item the install would touch (an item with the same ID elsewhere would be
+  moved or rewritten), and the package may contain no files. This is the strictest rule that still lets a
+  scoped client install content packages for its own site.
+- **Users and roles** in a package are not installed (the wizard does that in a separate step); the
+  preview warns about them.
+
+**Running.** The install runs as a Sitecore job (category `packageInstall`) as the calling
+administrator with security **enabled** — unlike the wizard, no `SecurityDisabler`. The tool waits up to
+20 seconds: a finished install returns what was processed (item, file and blob entries), whether the post
+step ran, and `postInstall` steps (publish the master items, refresh indexes, expect a restart after
+code, run a skipped post step by hand, read the readme). A longer install returns the job handle; poll
+`sitecore_get_jobs`. The package is registered under `/sitecore/system/Packages/Installation history` in
+core, as the wizard does, and `packageinstall:ended` is raised. Like the wizard, Sitecore's reader holds
+the package's entries in memory while installing, so very large packages belong in a deployment, not an
+MCP call.
 
 ## Search — the full query surface
 

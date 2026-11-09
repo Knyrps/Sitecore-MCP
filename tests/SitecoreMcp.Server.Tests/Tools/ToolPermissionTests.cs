@@ -23,11 +23,17 @@ namespace SitecoreMcp.Server.Tests.Tools
             "sitecore_create_template",
             "sitecore_disable_user",
             "sitecore_enable_user",
+            "sitecore_create_package",
+            "sitecore_download_package",
+            "sitecore_get_config",
             "sitecore_get_domain",
             "sitecore_get_logs",
             "sitecore_get_role",
             "sitecore_get_user",
             "sitecore_index_status",
+            "sitecore_inspect_package",
+            "sitecore_install_package",
+            "sitecore_list_packages",
             "sitecore_new_domain",
             "sitecore_new_role",
             "sitecore_new_user",
@@ -41,7 +47,8 @@ namespace SitecoreMcp.Server.Tests.Tools
             "sitecore_remove_user",
             "sitecore_set_item_acl",
             "sitecore_test_item_acl",
-            "sitecore_unlock_user"
+            "sitecore_unlock_user",
+            "sitecore_upload_package"
         };
 
         // Anything that changes content, presentation, security, or instance state.
@@ -56,10 +63,13 @@ namespace SitecoreMcp.Server.Tests.Tools
             "sitecore_clear_item_acl",
             "sitecore_copy_item",
             "sitecore_create_item",
+            "sitecore_create_package",
             "sitecore_create_template",
             "sitecore_delete_item",
             "sitecore_disable_user",
+            "sitecore_download_package",
             "sitecore_enable_user",
+            "sitecore_install_package",
             "sitecore_invoke_workflow",
             "sitecore_lock_item",
             "sitecore_move_item",
@@ -91,7 +101,8 @@ namespace SitecoreMcp.Server.Tests.Tools
             "sitecore_unprotect_item",
             "sitecore_update_item",
             "sitecore_update_item_referrers",
-            "sitecore_upload_media"
+            "sitecore_upload_media",
+            "sitecore_upload_package"
         };
 
         [Fact]

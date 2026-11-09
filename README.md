@@ -1,8 +1,9 @@
 # Sitecore MCP Server
 
 An [MCP](https://modelcontextprotocol.io) server that runs **inside** Sitecore as a .NET Framework assembly. It gives an
-AI agent 67 tools over the real Kernel API (items, templates, presentation, media, search, publishing, security and
-workflow), and every call runs as a real Sitecore user, so item and field ACLs, locks, workflow and auditing apply.
+AI agent 74 tools over the real Kernel API (items, templates, presentation, media, search, publishing, security,
+workflow, configuration and packages), and every call runs as a real Sitecore user, so item and field ACLs, locks,
+workflow and auditing apply.
 
 **Target:** Sitecore XM/XP 10.3 and 10.4, CM role only · .NET Framework 4.8 · IIS or containers.
 
@@ -134,6 +135,7 @@ committed config.
 | **Databases** | Allow-listed per client. |
 | **Admin gate** | Schema, security and dev/ops tools need an administrator and are hidden from others. Config can add an admin requirement (`admin="true"` on a `<tool>`) but never remove one. |
 | **Transport** | HTTPS required by default, plus Origin, client-address (`<allowedAddresses>`, localhost by default), body-size and media-type gates; `<trustedProxies>` for `X-Forwarded-For`. |
+| **Configuration & packages** | Admin-only. `get_config` reads the merged configuration with secret-looking values always redacted; Sitecore-MCP never writes configuration (a temporary override tool was evaluated and rejected, see [TOOL_GUIDE](docs/TOOL_GUIDE.md#temporary-config-overrides--evaluated-not-built)). Packages are addressed by name inside the packages folder. `install_package` always needs confirmation, even for a client with confirmation off; skips existing items and files by default; never installs web.config, connection strings, the license, App_Data or Sitecore-MCP's own files; installs code (`/bin`, `App_Config`, `.dll`, `.config`, `.aspx`, `.cshtml`...) and runs post steps only with `Mcp.Packages.AllowCode`; and with content roots refuses any package reaching outside them. |
 | **Audit** | Every call is logged to `mcp.log`: user, client, identity source, tool, target, status, duration, and for a direct change how it was confirmed (`confirmed=pending\|yes\|rejected\|skipped`). |
 
 **Per environment:** local dev may use an admin user with `Mcp.RequireHttps=false` and `Mcp.VerboseErrors=true`. Shared
@@ -200,6 +202,8 @@ All under `<sitecore><settings>`.
 | `Mcp.EditorToken.Issuer` / `.LifetimeSeconds` / `.ClockSkewSeconds` | `SitecoreMcp` / `900` / `60` | Editor-token issuer, lifetime (min 30) and clock tolerance. |
 | `Mcp.EditorToken.EndpointPath` | `sitecore/api/sitecore-mcp/editor-token` | Route of the issuing endpoint. |
 | `Mcp.EditorToken.AllowedDomains` | `sitecore` | Domains (pipe-separated) whose users may get a token. |
+| `Mcp.Packages.AllowCode` | `false` | Let `sitecore_install_package` install code and configuration files and run post steps. Enabling it lets an administrator's client deploy code into the site. |
+| `Mcp.Packages.MaxDownloadBytes` | `1048576` | Largest package `sitecore_download_package` returns. |
 
 ## Troubleshooting
 
@@ -211,13 +215,13 @@ All under `<sitecore><settings>`.
 | An editor-token client never authenticates | It was skipped at startup (it has a `user`, `confirmDirectChanges="false"`, or no `id`); see `mcp.log`. |
 | Only one client works | Each `<client>` needs a unique `id`. |
 | Tool missing from `tools/list` | Write-gated (`Mcp.AllowWrites` and the client's `allowWrites`) or admin-gated. |
-| A write returns `confirmationRequired` | The client confirms direct changes (always for an editor-token client; for a fixed-user client only with `confirmDirectChanges="true"` or `Mcp.ConfirmDirectChanges`). Repeat the call with the returned `confirmationToken` after a person confirms, or turn confirmation off for that fixed-user client. `sitecore_get_context` shows `confirmDirectChanges`. |
+| A write returns `confirmationRequired` | `sitecore_install_package` always does. Otherwise the client confirms direct changes (always for an editor-token client; for a fixed-user client only with `confirmDirectChanges="true"` or `Mcp.ConfirmDirectChanges`). Repeat the call with the returned `confirmationToken` after a person confirms, or turn confirmation off for that fixed-user client. `sitecore_get_context` shows `confirmDirectChanges`. |
 | `429` / `503` "server is busy" | Rate limit or `Mcp.MaxConcurrentCalls`; raise them or pace the calls. |
 | Endpoint returns HTML | The app is restarting or the route is not registered; check the Sitecore log. |
 
 ## Tools
 
-67 for an administrator, 41 for other users. Call `sitecore_get_context` first. Every tool and how to use it well is in
+74 for an administrator, 41 for other users. Call `sitecore_get_context` first. Every tool and how to use it well is in
 [docs/TOOL_GUIDE.md](docs/TOOL_GUIDE.md); the condensed version ships as the server's MCP `instructions`.
 
 | Area | Tools (`sitecore_` prefix omitted) |
@@ -232,6 +236,7 @@ All under `<sitecore><settings>`.
 | Workflow & publishing | `get_workflow_history`, `invoke_workflow`, `publish_item`, `get_jobs` |
 | Security (admin) | `get_user`, `new_user`, `remove_user`, `enable_user`, `disable_user`, `unlock_user`, `get_role`, `new_role`, `remove_role`, `add_role_member`, `remove_role_member`, `get_domain`, `new_domain`, `remove_domain`, `test_item_acl`, `add_item_acl`, `set_item_acl`, `clear_item_acl` |
 | Dev/ops (admin) | `rebuild_index`, `populate_solr_schema`, `rebuild_link_database`, `get_logs` |
+| Configuration & packages (admin) | `get_config` (merged config by XPath, secrets redacted), `list_packages`, `inspect_package`, `create_package`, `install_package` (always confirmed), `upload_package`, `download_package` |
 
 Tools are registered in `SitecoreMcp.config`, so a solution can add its own (`McpTool<TArgs>`) without recompiling this
 assembly.

@@ -48,6 +48,18 @@ namespace SitecoreMcp.Server.Portable.Tests.Protocol
             Assert.Contains(expected, (string)JObject.Parse(outcome.Body)["result"]["instructions"]);
         }
 
+        [Theory]
+        [InlineData(true)]
+        [InlineData(false)]
+        public void Every_client_is_told_that_package_installs_always_stop_at_a_preview(bool confirm)
+        {
+            var text = McpServerInstructions.For(confirm);
+
+            Assert.Contains("sitecore_install_package ALWAYS returns a preview first", text);
+            Assert.Contains("sitecore_get_config", text);
+            Assert.Contains("redacted", text);
+        }
+
         [Fact]
         public void A_dispatcher_built_without_instructions_sends_the_confirming_text()
         {

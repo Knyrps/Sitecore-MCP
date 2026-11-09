@@ -200,6 +200,8 @@ namespace SitecoreMcp.Server.Transport
             MaxImageDimension = Settings.GetIntSetting("Mcp.Images.MaxDimension", 1024),
             MaxImageBytes = Settings.GetLongSetting("Mcp.Images.MaxBytes", 1024 * 1024),
             VerboseErrors = Settings.GetBoolSetting("Mcp.VerboseErrors", false),
+            PackagesAllowCode = Settings.GetBoolSetting("Mcp.Packages.AllowCode", false),
+            MaxPackageDownloadBytes = Settings.GetLongSetting("Mcp.Packages.MaxDownloadBytes", 1024 * 1024),
             ServerName = Settings.GetSetting("Mcp.ServerName", "SitecoreMcp"),
             ServerVersion = Settings.GetSetting("Mcp.ServerVersion", "0.1.0"),
             EditorTokenEndpointPath = Settings.GetSetting("Mcp.EditorToken.EndpointPath", "sitecore/api/sitecore-mcp/editor-token"),

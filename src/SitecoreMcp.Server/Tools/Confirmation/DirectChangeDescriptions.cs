@@ -15,6 +15,16 @@ namespace SitecoreMcp.Server.Tools.Confirmation
     }
 
     /// <summary>
+    /// Implemented by a direct-change tool that always needs confirmation, whatever the calling client's
+    /// <c>confirmDirectChanges</c> setting (package install: it can deploy code and restart the site).
+    /// Its description and token argument are listed unchanged to every client, and it runs through
+    /// <see cref="DirectChangeGate"/> with confirmation required.
+    /// </summary>
+    public interface IAlwaysConfirmedDirectChange
+    {
+    }
+
+    /// <summary>
     /// Fits a listed tool's wording to the calling client. Only descriptions change: the input schema
     /// keeps its confirmationToken argument for every client, because CorePilot pins the upstream tool
     /// list and tells direct changes apart by that argument.
@@ -32,7 +42,7 @@ namespace SitecoreMcp.Server.Tools.Confirmation
         /// </summary>
         public static ToolDescriptor ForClient(ToolDescriptor descriptor, object tool, bool confirmDirectChanges)
         {
-            if (confirmDirectChanges || descriptor == null) return descriptor;
+            if (confirmDirectChanges || descriptor == null || tool is IAlwaysConfirmedDirectChange) return descriptor;
 
             var schema = descriptor.InputSchema;
             var token = schema?["properties"]?[ConfirmationCanonicalizer.TokenArgument] as JObject;

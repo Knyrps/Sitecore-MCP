@@ -48,5 +48,17 @@ namespace SitecoreMcp.Server.Tests.Tools
             Assert.DoesNotContain("confirm", described.DescriptionWithoutConfirmation, StringComparison.OrdinalIgnoreCase);
             Assert.DoesNotContain("preview", described.DescriptionWithoutConfirmation, StringComparison.OrdinalIgnoreCase);
         }
-}
+
+        [Fact]
+        public void Package_install_is_a_direct_change_that_always_confirms()
+        {
+            var tool = ToolCatalog.All.Single(t => t.Name == "sitecore_install_package");
+            var schema = JsonSchemaGenerator.Generate(tool.ArgumentType);
+
+            Assert.NotNull(schema["properties"]?["confirmationToken"]);
+            Assert.IsAssignableFrom<IAlwaysConfirmedDirectChange>(tool);
+            // It never claims to run on the first call, whatever the client.
+            Assert.False(tool is IDirectChangeDescription);
+        }
+    }
 }
