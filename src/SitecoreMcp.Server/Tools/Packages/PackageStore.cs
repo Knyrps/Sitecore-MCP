@@ -60,14 +60,17 @@ namespace SitecoreMcp.Server.Tools.Packages
         public static List<PackageEntryInfo> ReadEntries(string packagePath)
         {
             var recorder = new RecordingSink();
-            recorder.Initialize(Installer.CreatePreviewContext());
             try
             {
-                new PackageReader(packagePath).Populate(recorder);
+                using (InstallerScope.Enter())
+                {
+                    recorder.Initialize(Installer.CreatePreviewContext());
+                    new PackageReader(packagePath).Populate(recorder);
+                }
             }
-            catch (Exception ex)
+            catch (Exception ex) when (!(ex is McpToolException))
             {
-                throw new McpToolException($"'{Path.GetFileName(packagePath)}' could not be read as a Sitecore package: {ex.Message}");
+                throw InstallerScope.Explain(ex) ?? new McpToolException($"'{Path.GetFileName(packagePath)}' could not be read as a Sitecore package: {ex.Message}");
             }
 
             return recorder.Entries;

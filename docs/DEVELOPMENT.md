@@ -239,6 +239,11 @@ state Approved), calling as a non-admin editor:
 
 Only an instance proves the Sitecore-coupled halves. As an administrator client with writes on:
 
+0. On a freshly started app domain, the **first** package call made over `/sitecore/api/mcp` (create, inspect or
+   install) works. Sitecore's install API caches a failed static initialization for the life of the app domain
+   (`InstallerObjectFactory` reads its registry from `Context.Database`), so the tools enter the shell site with the
+   core database first (`InstallerScope`).
+
 1. `sitecore_get_config` with `/sitecore/settings/setting[@name='Mcp.Enabled']` — value and `patchSources`
    match showconfig.aspx; `//pipelines/httpRequestBegin` with `depth: 1`; an invalid XPath and a
    no-match XPath fail clearly; a setting holding a password reads `[redacted]`.
