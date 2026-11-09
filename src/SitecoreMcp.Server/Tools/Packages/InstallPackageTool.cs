@@ -169,7 +169,7 @@ namespace SitecoreMcp.Server.Tools.Packages
             var options = new DefaultJobOptions(
                 "MCP_InstallPackage_" + file.Name,
                 "packageInstall",
-                Sitecore.Context.Site?.Name ?? "shell",
+                InstallerScope.SiteName,
                 runner,
                 nameof(Runner.Run))
             {
@@ -209,6 +209,8 @@ namespace SitecoreMcp.Server.Tools.Packages
             if (runner.Failure != null)
             {
                 McpLog.Warn($"Package install failed: {file.Name}: {runner.Failure.Message}");
+                var explained = InstallerScope.Explain(runner.Failure);
+                if (explained != null) return McpToolResult.Failure(explained.Message);
                 return new McpToolResult
                 {
                     IsError = true,
@@ -293,6 +295,7 @@ namespace SitecoreMcp.Server.Tools.Packages
                     var installMode = (InstallMode)Enum.Parse(typeof(InstallMode), _itemMode.InstallMode);
                     var mergeMode = (MergeMode)Enum.Parse(typeof(MergeMode), _itemMode.MergeMode);
 
+                    using var scope = InstallerScope.Enter();
                     var context = Installer.CreateInstallationContext();
                     context.AddAspect<IItemInstallerEvents>(new DefaultItemInstallerEvents(new BehaviourOptions(installMode, mergeMode)));
                     context.AddAspect<IFileInstallerEvents>(new DefaultFileInstallerEvents(_overwriteFiles));

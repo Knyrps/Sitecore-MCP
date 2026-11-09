@@ -150,6 +150,7 @@ namespace SitecoreMcp.Server.Tools.Packages
             var temp = System.IO.Path.Combine(PackageStore.Folder, System.IO.Path.GetRandomFileName() + PackageFileName.Extension);
             try
             {
+                using (InstallerScope.Enter())
                 using (var writer = new PackageWriter(temp))
                 {
                     writer.Initialize(Installer.CreateInstallationContext());
@@ -162,7 +163,8 @@ namespace SitecoreMcp.Server.Tools.Packages
             catch (Exception ex) when (!(ex is McpToolException))
             {
                 TryDelete(temp);
-                throw new McpToolException("Building the package failed: " + ex.Message + " Nothing was written.");
+                throw InstallerScope.Explain(ex)
+                      ?? new McpToolException("Building the package failed: " + ex.Message + " Nothing was written.");
             }
 
             string projectFile = null;
@@ -170,7 +172,10 @@ namespace SitecoreMcp.Server.Tools.Packages
             {
                 Directory.CreateDirectory(PackageStore.ProjectFolder);
                 projectFile = System.IO.Path.Combine(PackageStore.ProjectFolder, PackageFileName.ProjectFor(fileName));
-                File.WriteAllText(projectFile, IOUtils.StoreSolution(project));
+                using (InstallerScope.Enter())
+                {
+                    File.WriteAllText(projectFile, IOUtils.StoreSolution(project));
+                }
             }
 
             // Report what was actually written, read back with Sitecore's reader.
