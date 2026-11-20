@@ -1,0 +1,39 @@
+<Project>
+
+  <!--
+    Shared setup for extensions: optional tool assemblies that plug into the server through its
+    <tools hint="raw:AddTool"> config, using the server's own types (McpTool<TArgs>, McpParam,
+    McpToolResult, McpCallContext, direct-change confirmation, McpLog). The server never references an
+    extension, so an extension can depend on modules (e.g. SPE) the server must not require.
+
+    An extension folder holds a csproj and, under App_Config\Include, the config patch that registers
+    its tools. Extensions are not in SitecoreMCP.slnx; build and deploy each one only where it applies.
+  -->
+  <Import Project="$(MSBuildThisFileDirectory)..\Directory.Build.props" />
+
+  <PropertyGroup>
+    <TargetFramework>net48</TargetFramework>
+    <AppendTargetFrameworkToOutputPath>false</AppendTargetFrameworkToOutputPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Compile-time only: the server deploys itself. Deploying an extension must never redeploy the server. -->
+    <ProjectReference Include="$(MSBuildThisFileDirectory)..\src\SitecoreMcp.Server\SitecoreMcp.Server.csproj" Private="false"
+                      GlobalPropertiesToRemove="DeployToSitecore" />
+
+    <Reference Include="System.Web" />
+    <Reference Include="Sitecore.Kernel">
+      <HintPath>$(SitecoreBinPath)\Sitecore.Kernel.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Newtonsoft.Json">
+      <HintPath>$(SitecoreBinPath)\Newtonsoft.Json.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+    <Reference Include="Sitecore.Logging">
+      <HintPath>$(SitecoreBinPath)\Sitecore.Logging.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+</Project>

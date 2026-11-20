@@ -1,0 +1,19 @@
+<Project>
+
+  <Target Name="VerifyExtensionReferences" BeforeTargets="ResolveAssemblyReferences">
+    <Error Condition="!Exists('$(SitecoreBinPath)\Sitecore.Kernel.dll')" Text="Sitecore.Kernel.dll not found under '$(SitecoreBinPath)'. Set &lt;SitecoreWebRoot&gt; in Directory.Build.user.props." />
+  </Target>
+
+  <!-- Opt-in: /p:DeployToSitecore=true copies the extension DLL and its config patch. A plain build never writes into a web root. -->
+  <Target Name="DeployToSitecore" AfterTargets="Build" Condition="'$(DeployToSitecore)' == 'true'">
+    <ItemGroup>
+      <_DeployBinaries Include="$(TargetPath)" />
+      <_DeployBinaries Include="$(TargetDir)$(AssemblyName).pdb" Condition="Exists('$(TargetDir)$(AssemblyName).pdb')" />
+      <_DeployConfigs Include="$(MSBuildProjectDirectory)\App_Config\Include\**\*.config" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_DeployBinaries)" DestinationFolder="$(SitecoreBinPath)" />
+    <Copy SourceFiles="@(_DeployConfigs)" DestinationFiles="@(_DeployConfigs->'$(SitecoreWebRoot)\App_Config\Include\%(RecursiveDir)%(Filename)%(Extension)')" />
+    <Message Importance="high" Text="Deployed $(AssemblyName) to $(SitecoreWebRoot)" />
+  </Target>
+
+</Project>

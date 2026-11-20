@@ -7,6 +7,10 @@ The notable changes to Sitecore-MCP, newest first. There are no tagged releases 
 
 ### Added
 
+- **Extensions.** Optional tool assemblies under `extensions/` that build on the server's types and register
+  through a config patch, so the server never depends on them. See `extensions/README.md`.
+  - `SitecoreMcp.Extensions.Spe` adds `sitecore_run_powershell`, running a Sitecore PowerShell Extensions script as
+    the calling user. Admin and write clients only, a direct change, every script logged to `mcp.log`.
 - **Configuration reading.** `sitecore_get_config` reads the merged `<sitecore>` configuration by XPath, as
   `showconfig.aspx` shows it: the live configuration, or a role/layer view rebuilt the way showconfig does. It returns
   node XML with path, attributes and patch sources, and always redacts secret-looking values. Admin-only. Sitecore-MCP

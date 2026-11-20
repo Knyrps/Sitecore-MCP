@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- sitecore_run_powershell, backed by Sitecore PowerShell Extensions. Needs an instance with SPE installed. -->
+  <PropertyGroup>
+    <RootNamespace>SitecoreMcp.Extensions.Spe</RootNamespace>
+    <AssemblyName>SitecoreMcp.Extensions.Spe</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="Spe">
+      <HintPath>$(SitecoreBinPath)\Spe.dll</HintPath>
+      <Private>false</Private>
+    </Reference>
+  </ItemGroup>
+
+  <Target Name="VerifySpeReference" BeforeTargets="ResolveAssemblyReferences">
+    <Error Condition="!Exists('$(SitecoreBinPath)\Spe.dll')" Text="Spe.dll not found under '$(SitecoreBinPath)'. This extension needs an instance with Sitecore PowerShell Extensions." />
+  </Target>
+
+</Project>
