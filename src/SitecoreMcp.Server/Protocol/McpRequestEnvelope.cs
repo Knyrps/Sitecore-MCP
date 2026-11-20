@@ -91,6 +91,28 @@ namespace SitecoreMcp.Server.Protocol
             return true;
         }
 
+        /// <summary>
+        /// Best-effort read of the request id, for errors raised before the body is fully validated
+        /// (auth, rate limit, busy). Returns null when the body has no usable id.
+        /// </summary>
+        public static JToken PeekId(string body)
+        {
+            if (string.IsNullOrWhiteSpace(body)) return null;
+            try
+            {
+                if (JToken.Parse(body) is JObject message && message.TryGetValue("id", out var id) &&
+                    (id.Type == JTokenType.String || id.Type == JTokenType.Integer))
+                {
+                    return id;
+                }
+            }
+            catch (JsonReaderException)
+            {
+            }
+
+            return null;
+        }
+
         private static DispatchOutcome Reject(int code, string message) =>
             DispatchOutcome.Error(400, JsonRpcResponse.Failure(null, code, message));
     }

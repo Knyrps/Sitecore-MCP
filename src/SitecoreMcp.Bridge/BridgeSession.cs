@@ -20,6 +20,11 @@ public sealed class BridgeSession
     private static readonly TimeSpan InitialProbeTimeout = TimeSpan.FromSeconds(10);
     private static readonly TimeSpan RetryInterval = TimeSpan.FromSeconds(5);
 
+    // How long a call may wait in total on 429 (rate limit) / 503 (busy) before the rejection is relayed.
+    // Both are returned before the server executes anything, so retrying never repeats a change.
+    private static readonly TimeSpan MaxThrottleWait = TimeSpan.FromSeconds(60);
+    private static readonly TimeSpan MaxRetryAfter = TimeSpan.FromSeconds(10);
+
     private readonly HttpClient _http;
     private readonly BridgeOptions _options;
     private readonly TextWriter _stdout;
@@ -55,7 +60,7 @@ public sealed class BridgeSession
 
         try
         {
-            using var response = await SendAsync(message, method, CancellationToken.None);
+            using var response = await SendWithRetryAsync(message, method);
             var body = await response.Content.ReadAsStringAsync();
 
             // A notification never gets a response written.
@@ -70,7 +75,7 @@ public sealed class BridgeSession
             // keep the raw detail on stderr.
             if (LooksLikeJson(body))
             {
-                await WriteLineAsync(body);
+                await WriteLineAsync(EchoRequestId(body, message));
             }
             else
             {
@@ -226,6 +231,72 @@ public sealed class BridgeSession
         }
 
         return await _http.SendAsync(request, cancellationToken);
+    }
+
+    /// <summary>
+    /// Sends a message and, while the server answers 429 or 503, waits for its Retry-After and resends,
+    /// up to <see cref="MaxThrottleWait"/>. The last response is returned either way.
+    /// </summary>
+    private async Task<HttpResponseMessage> SendWithRetryAsync(string message, string? method)
+    {
+        var waited = TimeSpan.Zero;
+        while (true)
+        {
+            var response = await SendAsync(message, method, CancellationToken.None);
+            var status = (int)response.StatusCode;
+            if (status != 429 && status != 503)
+            {
+                return response;
+            }
+
+            var delay = RetryAfter(response);
+            if (waited + delay > MaxThrottleWait)
+            {
+                Console.Error.WriteLine(
+                    $"[sitecore-mcp-bridge] HTTP {status} for {method ?? "message"}; gave up after waiting {waited.TotalSeconds:0}s.");
+                return response;
+            }
+
+            response.Dispose();
+            await Task.Delay(delay);
+            waited += delay;
+        }
+    }
+
+    private static TimeSpan RetryAfter(HttpResponseMessage response)
+    {
+        var header = response.Headers.RetryAfter;
+        var delay = header?.Delta ?? (header?.Date is { } date ? date - DateTimeOffset.UtcNow : TimeSpan.FromSeconds(1));
+        if (delay < TimeSpan.FromMilliseconds(250)) delay = TimeSpan.FromMilliseconds(250);
+        return delay > MaxRetryAfter ? MaxRetryAfter : delay;
+    }
+
+    /// <summary>
+    /// Ensures a response carries the request's id. The server answers some transport-level rejections
+    /// (rate limit, busy, auth) with "id": null; relayed unchanged, the client could never match it to its
+    /// pending request and would wait forever.
+    /// </summary>
+    internal static string EchoRequestId(string body, string request)
+    {
+        try
+        {
+            if (JsonNode.Parse(body) is not JsonObject response ||
+                (response.TryGetPropertyValue("id", out var current) && current != null))
+            {
+                return body;
+            }
+
+            if (JsonNode.Parse(request) is JsonObject req && req.TryGetPropertyValue("id", out var id) && id != null)
+            {
+                response["id"] = id.DeepClone();
+                return response.ToJsonString();
+            }
+        }
+        catch (JsonException)
+        {
+        }
+
+        return body;
     }
 
     private async Task WriteLineAsync(string line)

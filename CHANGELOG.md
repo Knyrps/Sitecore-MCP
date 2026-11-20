@@ -25,6 +25,11 @@ The notable changes to Sitecore-MCP, newest first. There are no tagged releases 
 
 ### Fixed
 
+- **Calls hung after the rate limit was reached.** The server answered 429 (rate limit) and 503 (busy) with
+  `"id": null`, which a client cannot match to its pending request. Every early rejection (authentication, rate
+  limit, busy, protocol version) now echoes the request id. The bridge also waits for `Retry-After` and resends on
+  429/503 (up to 60 s in total; both are returned before anything runs, so a retry never repeats a change) and fills
+  in a missing id on any response it relays.
 - `sitecore_create_package` failed with "The type initializer for 'Sitecore.Install.Serialization.IOUtils' threw an
   exception". Every call into Sitecore's install API now runs in the shell site with the core database, as the Package
   Designer does. An instance that already hit the failure needs its app pool recycled once.

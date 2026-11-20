@@ -62,11 +62,12 @@ namespace SitecoreMcp.Server.Transport
                 return McpResponse.FromOutcome(gate.ToOutcome());
             }
 
+            var requestId = McpRequestEnvelope.PeekId(body);
             var authentication = _authenticator.AuthenticateCall(request);
             if (authentication.Client == null)
             {
                 McpLog.Warn($"Rejected unauthenticated request from {request.RemoteAddress}.");
-                return Error(401, JsonRpcErrorCodes.InvalidRequest, "Authentication is required.",
+                return Error(requestId, 401, JsonRpcErrorCodes.InvalidRequest, "Authentication is required.",
                     Header("WWW-Authenticate", "Bearer"));
             }
 
@@ -74,7 +75,7 @@ namespace SitecoreMcp.Server.Transport
             {
                 // An editor-token client with no usable token. There is no fixed-user fallback.
                 McpLog.Warn($"Rejected request from client '{authentication.Client.Id}': editor token {Describe(authentication.EditorTokenFailure)}.");
-                return Error(401, JsonRpcErrorCodes.InvalidRequest,
+                return Error(requestId, 401, JsonRpcErrorCodes.InvalidRequest,
                     $"A valid editor token is required ({McpHeaders.EditorToken}); the token presented was {Describe(authentication.EditorTokenFailure)}.",
                     Header("WWW-Authenticate", "Bearer error=\"invalid_token\""));
             }
@@ -84,7 +85,7 @@ namespace SitecoreMcp.Server.Transport
             var limit = _rateLimiter.TryAcquire(authentication.UserName);
             if (!limit.Allowed)
             {
-                return Error(429, JsonRpcErrorCodes.InvalidRequest, "Rate limit exceeded.",
+                return Error(requestId, 429, JsonRpcErrorCodes.InvalidRequest, "Rate limit exceeded.",
                     Header("Retry-After", limit.RetryAfterSeconds.ToString()));
             }
 
@@ -98,14 +99,14 @@ namespace SitecoreMcp.Server.Transport
                 var version = request.GetHeader(McpHeaders.ProtocolVersion);
                 if (!McpProtocolVersions.IsSupported(version))
                 {
-                    return Error(400, JsonRpcErrorCodes.InvalidRequest,
+                    return Error(envelope.Id, 400, JsonRpcErrorCodes.InvalidRequest,
                         $"Missing or unsupported {McpHeaders.ProtocolVersion} header.");
                 }
             }
 
             if (!_concurrency.Wait(0))
             {
-                return Error(503, JsonRpcErrorCodes.InternalError, "The server is busy; retry shortly.",
+                return Error(envelope.Id, 503, JsonRpcErrorCodes.InternalError, "The server is busy; retry shortly.",
                     Header("Retry-After", "1"));
             }
 
@@ -130,18 +131,18 @@ namespace SitecoreMcp.Server.Transport
                 {
                     // A validly signed token for an account deleted since it was issued.
                     McpLog.Warn($"Rejected editor token for '{userName}' from client '{client.Id}': the user no longer exists.");
-                    return Error(401, JsonRpcErrorCodes.InvalidRequest, "The editor named by the token does not exist.");
+                    return Error(envelope.Id, 401, JsonRpcErrorCodes.InvalidRequest, "The editor named by the token does not exist.");
                 }
 
                 McpLog.Error($"Configured user '{userName}' does not exist.");
-                return Error(500, JsonRpcErrorCodes.InternalError, "The configured MCP user does not exist.");
+                return Error(envelope.Id, 500, JsonRpcErrorCodes.InternalError, "The configured MCP user does not exist.");
             }
 
             if (authentication.IsEditor && !IsActive(userName))
             {
                 // Disabled or locked out since the token was issued: the token must not outlive the account.
                 McpLog.Warn($"Rejected editor token for '{userName}' from client '{client.Id}': the account is disabled or locked out.");
-                return Error(403, JsonRpcErrorCodes.InvalidRequest, "The editor's account is disabled or locked out.");
+                return Error(envelope.Id, 403, JsonRpcErrorCodes.InvalidRequest, "The editor's account is disabled or locked out.");
             }
 
             var user = User.FromName(userName, true);
@@ -234,6 +235,10 @@ namespace SitecoreMcp.Server.Transport
 
         private static McpResponse Error(int status, int code, string message,
             IReadOnlyDictionary<string, string> headers = null) =>
-            new McpResponse(status, McpJson.Serialize(JsonRpcResponse.Failure(null, code, message)), headers);
+            Error(null, status, code, message, headers);
+
+        private static McpResponse Error(Newtonsoft.Json.Linq.JToken id, int status, int code, string message,
+            IReadOnlyDictionary<string, string> headers = null) =>
+            new McpResponse(status, McpJson.Serialize(JsonRpcResponse.Failure(id, code, message)), headers);
     }
 }
